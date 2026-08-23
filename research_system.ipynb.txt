@@ -1,0 +1,555 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "Q1t9XuPio6b7"
+   },
+   "outputs": [],
+   "source": [
+    "reuqirements=!pip install langgraph langchain langchain-openai langchain-tavily pydantic pydantic-settings python-dotenv streamlit requests beautifulsoup4"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "colab": {
+     "background_save": true,
+     "base_uri": "https://localhost:8080/"
+    },
+    "collapsed": true,
+    "id": "BTgt_r0oaiG2",
+    "outputId": "41808d22-b09b-409b-f8ce-cd7fc1e1a951"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Collecting chromadb\n",
+      "  Downloading chromadb-1.5.9-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.0 kB)\n",
+      "Collecting langchain-chroma\n",
+      "  Downloading langchain_chroma-1.1.0-py3-none-any.whl.metadata (1.9 kB)\n",
+      "Collecting build>=1.0.3 (from chromadb)\n",
+      "  Downloading build-1.5.0-py3-none-any.whl.metadata (5.7 kB)\n",
+      "Requirement already satisfied: pydantic>=2.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (2.13.4)\n",
+      "Requirement already satisfied: pydantic-settings>=2.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (2.15.0)\n",
+      "Collecting pybase64>=1.4.1 (from chromadb)\n",
+      "  Downloading pybase64-1.5.0-cp313-cp313-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl.metadata (11 kB)\n",
+      "Requirement already satisfied: uvicorn>=0.18.3 in /usr/local/lib/python3.13/dist-packages (from uvicorn[standard]>=0.18.3->chromadb) (0.52.3)\n",
+      "Requirement already satisfied: numpy>=1.22.5 in /usr/local/lib/python3.13/dist-packages (from chromadb) (2.1.3)\n",
+      "Requirement already satisfied: typing-extensions>=4.5.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (4.16.0)\n",
+      "Collecting onnxruntime>=1.14.1 (from chromadb)\n",
+      "  Downloading onnxruntime-1.29.0-cp313-cp313-manylinux_2_28_x86_64.whl.metadata (5.6 kB)\n",
+      "Requirement already satisfied: opentelemetry-api>=1.2.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (1.42.1)\n",
+      "Collecting opentelemetry-exporter-otlp-proto-grpc>=1.2.0 (from chromadb)\n",
+      "  Downloading opentelemetry_exporter_otlp_proto_grpc-1.44.0-py3-none-any.whl.metadata (2.6 kB)\n",
+      "Requirement already satisfied: opentelemetry-sdk>=1.2.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (1.42.1)\n",
+      "Requirement already satisfied: tokenizers>=0.13.2 in /usr/local/lib/python3.13/dist-packages (from chromadb) (0.22.2)\n",
+      "Collecting pypika>=0.48.9 (from chromadb)\n",
+      "  Downloading pypika-0.51.1-py2.py3-none-any.whl.metadata (51 kB)\n",
+      "\u001b[2K     \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m52.0/52.0 kB\u001b[0m \u001b[31m3.3 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hRequirement already satisfied: tqdm>=4.65.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (4.67.3)\n",
+      "Collecting overrides>=7.3.1 (from chromadb)\n",
+      "  Downloading overrides-7.7.0-py3-none-any.whl.metadata (5.8 kB)\n",
+      "Collecting importlib-resources (from chromadb)\n",
+      "  Downloading importlib_resources-7.1.0-py3-none-any.whl.metadata (4.0 kB)\n",
+      "Requirement already satisfied: grpcio>=1.58.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (1.83.0)\n",
+      "Collecting bcrypt>=4.0.1 (from chromadb)\n",
+      "  Downloading bcrypt-5.0.0-cp39-abi3-manylinux_2_34_x86_64.whl.metadata (10 kB)\n",
+      "Requirement already satisfied: typer>=0.9.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (0.27.1)\n",
+      "Collecting kubernetes>=28.1.0 (from chromadb)\n",
+      "  Downloading kubernetes-36.0.3-py2.py3-none-any.whl.metadata (1.8 kB)\n",
+      "Requirement already satisfied: tenacity>=8.2.3 in /usr/local/lib/python3.13/dist-packages (from chromadb) (9.1.4)\n",
+      "Requirement already satisfied: pyyaml>=6.0.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (6.0.3)\n",
+      "Requirement already satisfied: mmh3>=4.0.1 in /usr/local/lib/python3.13/dist-packages (from chromadb) (5.2.1)\n",
+      "Requirement already satisfied: orjson>=3.9.12 in /usr/local/lib/python3.13/dist-packages (from chromadb) (3.12.0)\n",
+      "Requirement already satisfied: httpx>=0.27.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (0.28.1)\n",
+      "Requirement already satisfied: rich>=10.11.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (13.9.4)\n",
+      "Requirement already satisfied: jsonschema>=4.19.0 in /usr/local/lib/python3.13/dist-packages (from chromadb) (4.26.0)\n",
+      "Requirement already satisfied: langchain-core<2.0.0,>=1.1.3 in /usr/local/lib/python3.13/dist-packages (from langchain-chroma) (1.6.0)\n",
+      "Requirement already satisfied: packaging>=24.0 in /usr/local/lib/python3.13/dist-packages (from build>=1.0.3->chromadb) (26.3)\n",
+      "Collecting pyproject_hooks (from build>=1.0.3->chromadb)\n",
+      "  Downloading pyproject_hooks-1.2.0-py3-none-any.whl.metadata (1.3 kB)\n",
+      "Requirement already satisfied: anyio in /usr/local/lib/python3.13/dist-packages (from httpx>=0.27.0->chromadb) (4.14.2)\n",
+      "Requirement already satisfied: certifi in /usr/local/lib/python3.13/dist-packages (from httpx>=0.27.0->chromadb) (2026.7.22)\n",
+      "Requirement already satisfied: httpcore==1.* in /usr/local/lib/python3.13/dist-packages (from httpx>=0.27.0->chromadb) (1.0.9)\n",
+      "Requirement already satisfied: idna in /usr/local/lib/python3.13/dist-packages (from httpx>=0.27.0->chromadb) (3.18)\n",
+      "Requirement already satisfied: h11>=0.16 in /usr/local/lib/python3.13/dist-packages (from httpcore==1.*->httpx>=0.27.0->chromadb) (0.16.0)\n",
+      "Requirement already satisfied: attrs>=22.2.0 in /usr/local/lib/python3.13/dist-packages (from jsonschema>=4.19.0->chromadb) (26.1.0)\n",
+      "Requirement already satisfied: jsonschema-specifications>=2023.03.6 in /usr/local/lib/python3.13/dist-packages (from jsonschema>=4.19.0->chromadb) (2025.9.1)\n",
+      "Requirement already satisfied: referencing>=0.28.4 in /usr/local/lib/python3.13/dist-packages (from jsonschema>=4.19.0->chromadb) (0.37.0)\n",
+      "Requirement already satisfied: rpds-py>=0.25.0 in /usr/local/lib/python3.13/dist-packages (from jsonschema>=4.19.0->chromadb) (2026.6.3)\n",
+      "Requirement already satisfied: six>=1.9.0 in /usr/local/lib/python3.13/dist-packages (from kubernetes>=28.1.0->chromadb) (1.17.0)\n",
+      "Requirement already satisfied: python-dateutil>=2.5.3 in /usr/local/lib/python3.13/dist-packages (from kubernetes>=28.1.0->chromadb) (2.9.0.post0)\n",
+      "Requirement already satisfied: websocket-client!=0.40.0,!=0.41.*,!=0.42.*,>=0.32.0 in /usr/local/lib/python3.13/dist-packages (from kubernetes>=28.1.0->chromadb) (1.9.0)\n",
+      "Requirement already satisfied: requests in /usr/local/lib/python3.13/dist-packages (from kubernetes>=28.1.0->chromadb) (2.32.4)\n",
+      "Requirement already satisfied: requests-oauthlib in /usr/local/lib/python3.13/dist-packages (from kubernetes>=28.1.0->chromadb) (2.0.0)\n",
+      "Requirement already satisfied: urllib3!=2.6.0,>=1.24.2 in /usr/local/lib/python3.13/dist-packages (from kubernetes>=28.1.0->chromadb) (2.5.0)\n",
+      "Collecting durationpy>=0.7 (from kubernetes>=28.1.0->chromadb)\n",
+      "  Downloading durationpy-0.10-py3-none-any.whl.metadata (340 bytes)\n",
+      "Requirement already satisfied: aiohttp<4.0.0,>=3.13.5 in /usr/local/lib/python3.13/dist-packages (from kubernetes>=28.1.0->chromadb) (3.14.3)\n",
+      "Requirement already satisfied: jsonpatch<2.0.0,>=1.33.0 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.1.3->langchain-chroma) (1.33)\n",
+      "Requirement already satisfied: langchain-protocol>=0.0.17 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.1.3->langchain-chroma) (0.0.18)\n",
+      "Requirement already satisfied: langsmith<1.0.0,>=0.3.45 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.1.3->langchain-chroma) (0.11.0)\n",
+      "Requirement already satisfied: uuid-utils<1.0,>=0.12.0 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.1.3->langchain-chroma) (0.17.0)\n",
+      "Requirement already satisfied: flatbuffers in /usr/local/lib/python3.13/dist-packages (from onnxruntime>=1.14.1->chromadb) (25.12.19)\n",
+      "Requirement already satisfied: protobuf>=4.25.8 in /usr/local/lib/python3.13/dist-packages (from onnxruntime>=1.14.1->chromadb) (5.29.6)\n",
+      "Requirement already satisfied: googleapis-common-protos~=1.57 in /usr/local/lib/python3.13/dist-packages (from opentelemetry-exporter-otlp-proto-grpc>=1.2.0->chromadb) (1.75.0)\n",
+      "Collecting opentelemetry-exporter-otlp-proto-common==1.44.0 (from opentelemetry-exporter-otlp-proto-grpc>=1.2.0->chromadb)\n",
+      "  Downloading opentelemetry_exporter_otlp_proto_common-1.44.0-py3-none-any.whl.metadata (1.8 kB)\n",
+      "Collecting opentelemetry-proto==1.44.0 (from opentelemetry-exporter-otlp-proto-grpc>=1.2.0->chromadb)\n",
+      "  Downloading opentelemetry_proto-1.44.0-py3-none-any.whl.metadata (2.3 kB)\n",
+      "Collecting opentelemetry-sdk>=1.2.0 (from chromadb)\n",
+      "  Downloading opentelemetry_sdk-1.44.0-py3-none-any.whl.metadata (1.6 kB)\n",
+      "Collecting opentelemetry-api>=1.2.0 (from chromadb)\n",
+      "  Downloading opentelemetry_api-1.44.0-py3-none-any.whl.metadata (1.4 kB)\n",
+      "Collecting opentelemetry-semantic-conventions==0.65b0 (from opentelemetry-sdk>=1.2.0->chromadb)\n",
+      "  Downloading opentelemetry_semantic_conventions-0.65b0-py3-none-any.whl.metadata (2.4 kB)\n",
+      "Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.13/dist-packages (from pydantic>=2.0->chromadb) (0.8.0)\n",
+      "Requirement already satisfied: pydantic-core==2.46.4 in /usr/local/lib/python3.13/dist-packages (from pydantic>=2.0->chromadb) (2.46.4)\n",
+      "Requirement already satisfied: typing-inspection>=0.4.2 in /usr/local/lib/python3.13/dist-packages (from pydantic>=2.0->chromadb) (0.4.4)\n",
+      "Requirement already satisfied: python-dotenv>=0.21.0 in /usr/local/lib/python3.13/dist-packages (from pydantic-settings>=2.0->chromadb) (1.2.3)\n",
+      "Requirement already satisfied: markdown-it-py>=2.2.0 in /usr/local/lib/python3.13/dist-packages (from rich>=10.11.0->chromadb) (4.2.0)\n",
+      "Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /usr/local/lib/python3.13/dist-packages (from rich>=10.11.0->chromadb) (2.21.0)\n",
+      "Requirement already satisfied: huggingface-hub<2.0,>=0.16.4 in /usr/local/lib/python3.13/dist-packages (from tokenizers>=0.13.2->chromadb) (1.27.0)\n",
+      "Requirement already satisfied: shellingham>=1.3.0 in /usr/local/lib/python3.13/dist-packages (from typer>=0.9.0->chromadb) (1.5.4)\n",
+      "Requirement already satisfied: annotated-doc>=0.0.2 in /usr/local/lib/python3.13/dist-packages (from typer>=0.9.0->chromadb) (0.0.5)\n",
+      "Requirement already satisfied: click>=7.0 in /usr/local/lib/python3.13/dist-packages (from uvicorn>=0.18.3->uvicorn[standard]>=0.18.3->chromadb) (8.4.2)\n",
+      "Requirement already satisfied: httptools>=0.8.0 in /usr/local/lib/python3.13/dist-packages (from uvicorn[standard]>=0.18.3->chromadb) (0.8.0)\n",
+      "Requirement already satisfied: uvloop>=0.15.1 in /usr/local/lib/python3.13/dist-packages (from uvicorn[standard]>=0.18.3->chromadb) (0.22.1)\n",
+      "Requirement already satisfied: watchfiles>=0.20 in /usr/local/lib/python3.13/dist-packages (from uvicorn[standard]>=0.18.3->chromadb) (1.2.0)\n",
+      "Requirement already satisfied: websockets>=13.0 in /usr/local/lib/python3.13/dist-packages (from uvicorn[standard]>=0.18.3->chromadb) (15.0.1)\n",
+      "Requirement already satisfied: aiohappyeyeballs>=2.5.0 in /usr/local/lib/python3.13/dist-packages (from aiohttp<4.0.0,>=3.13.5->kubernetes>=28.1.0->chromadb) (2.7.1)\n",
+      "Requirement already satisfied: aiosignal>=1.4.0 in /usr/local/lib/python3.13/dist-packages (from aiohttp<4.0.0,>=3.13.5->kubernetes>=28.1.0->chromadb) (1.4.0)\n",
+      "Requirement already satisfied: frozenlist>=1.1.1 in /usr/local/lib/python3.13/dist-packages (from aiohttp<4.0.0,>=3.13.5->kubernetes>=28.1.0->chromadb) (1.8.0)\n",
+      "Requirement already satisfied: multidict<7.0,>=4.5 in /usr/local/lib/python3.13/dist-packages (from aiohttp<4.0.0,>=3.13.5->kubernetes>=28.1.0->chromadb) (6.7.1)\n",
+      "Requirement already satisfied: propcache>=0.2.0 in /usr/local/lib/python3.13/dist-packages (from aiohttp<4.0.0,>=3.13.5->kubernetes>=28.1.0->chromadb) (0.5.2)\n",
+      "Requirement already satisfied: yarl<2.0,>=1.17.0 in /usr/local/lib/python3.13/dist-packages (from aiohttp<4.0.0,>=3.13.5->kubernetes>=28.1.0->chromadb) (1.24.5)\n",
+      "Requirement already satisfied: filelock>=3.10.0 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers>=0.13.2->chromadb) (3.32.3)\n",
+      "Requirement already satisfied: fsspec>=2023.5.0 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers>=0.13.2->chromadb) (2025.3.0)\n",
+      "Requirement already satisfied: hf-xet<2.0.0,>=1.5.2 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers>=0.13.2->chromadb) (1.6.0)\n",
+      "Requirement already satisfied: jsonpointer>=1.9 in /usr/local/lib/python3.13/dist-packages (from jsonpatch<2.0.0,>=1.33.0->langchain-core<2.0.0,>=1.1.3->langchain-chroma) (3.1.1)\n",
+      "Requirement already satisfied: distro>=1.7.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.1.3->langchain-chroma) (1.9.0)\n",
+      "Requirement already satisfied: requests-toolbelt>=1.0.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.1.3->langchain-chroma) (1.0.0)\n",
+      "Requirement already satisfied: sniffio>=1.1 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.1.3->langchain-chroma) (1.3.1)\n",
+      "Requirement already satisfied: xxhash>=3.0.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.1.3->langchain-chroma) (4.0.1)\n",
+      "Requirement already satisfied: zstandard>=0.23.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.1.3->langchain-chroma) (0.25.0)\n",
+      "Requirement already satisfied: mdurl~=0.1 in /usr/local/lib/python3.13/dist-packages (from markdown-it-py>=2.2.0->rich>=10.11.0->chromadb) (0.1.2)\n",
+      "Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.13/dist-packages (from requests->kubernetes>=28.1.0->chromadb) (3.4.9)\n",
+      "Requirement already satisfied: oauthlib>=3.0.0 in /usr/local/lib/python3.13/dist-packages (from requests-oauthlib->kubernetes>=28.1.0->chromadb) (3.3.1)\n",
+      "Downloading chromadb-1.5.9-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (23.3 MB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m23.3/23.3 MB\u001b[0m \u001b[31m61.8 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading langchain_chroma-1.1.0-py3-none-any.whl (12 kB)\n",
+      "Downloading bcrypt-5.0.0-cp39-abi3-manylinux_2_34_x86_64.whl (278 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m278.2/278.2 kB\u001b[0m \u001b[31m11.2 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading build-1.5.0-py3-none-any.whl (26 kB)\n",
+      "Downloading kubernetes-36.0.3-py2.py3-none-any.whl (4.6 MB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m4.6/4.6 MB\u001b[0m \u001b[31m80.6 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading onnxruntime-1.29.0-cp313-cp313-manylinux_2_28_x86_64.whl (23.1 MB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m23.1/23.1 MB\u001b[0m \u001b[31m56.2 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading opentelemetry_exporter_otlp_proto_grpc-1.44.0-py3-none-any.whl (19 kB)\n",
+      "Downloading opentelemetry_exporter_otlp_proto_common-1.44.0-py3-none-any.whl (17 kB)\n",
+      "Downloading opentelemetry_proto-1.44.0-py3-none-any.whl (72 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m72.5/72.5 kB\u001b[0m \u001b[31m5.5 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading opentelemetry_sdk-1.44.0-py3-none-any.whl (137 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m137.2/137.2 kB\u001b[0m \u001b[31m10.0 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading opentelemetry_api-1.44.0-py3-none-any.whl (60 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m60.0/60.0 kB\u001b[0m \u001b[31m4.5 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading opentelemetry_semantic_conventions-0.65b0-py3-none-any.whl (204 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m204.6/204.6 kB\u001b[0m \u001b[31m13.5 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading overrides-7.7.0-py3-none-any.whl (17 kB)\n",
+      "Downloading pybase64-1.5.0-cp313-cp313-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl (95 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m95.7/95.7 kB\u001b[0m \u001b[31m7.6 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading pypika-0.51.1-py2.py3-none-any.whl (60 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m60.6/60.6 kB\u001b[0m \u001b[31m3.9 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading importlib_resources-7.1.0-py3-none-any.whl (37 kB)\n",
+      "Downloading durationpy-0.10-py3-none-any.whl (3.9 kB)\n",
+      "Downloading pyproject_hooks-1.2.0-py3-none-any.whl (10 kB)\n",
+      "Installing collected packages: pypika, durationpy, pyproject_hooks, pybase64, overrides, opentelemetry-proto, opentelemetry-api, onnxruntime, importlib-resources, bcrypt, opentelemetry-semantic-conventions, opentelemetry-exporter-otlp-proto-common, build, opentelemetry-sdk, kubernetes, opentelemetry-exporter-otlp-proto-grpc, chromadb, langchain-chroma\n",
+      "  Attempting uninstall: opentelemetry-api\n",
+      "    Found existing installation: opentelemetry-api 1.42.1\n",
+      "    Uninstalling opentelemetry-api-1.42.1:\n",
+      "      Successfully uninstalled opentelemetry-api-1.42.1\n",
+      "  Attempting uninstall: opentelemetry-semantic-conventions\n",
+      "    Found existing installation: opentelemetry-semantic-conventions 0.63b1\n",
+      "    Uninstalling opentelemetry-semantic-conventions-0.63b1:\n",
+      "      Successfully uninstalled opentelemetry-semantic-conventions-0.63b1\n",
+      "  Attempting uninstall: opentelemetry-sdk\n",
+      "    Found existing installation: opentelemetry-sdk 1.42.1\n",
+      "    Uninstalling opentelemetry-sdk-1.42.1:\n",
+      "      Successfully uninstalled opentelemetry-sdk-1.42.1\n",
+      "\u001b[31mERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.\n",
+      "google-adk 2.7.1 requires opentelemetry-api<=1.42.1,>=1.39, but you have opentelemetry-api 1.44.0 which is incompatible.\n",
+      "google-adk 2.7.1 requires opentelemetry-sdk<=1.42.1,>=1.39, but you have opentelemetry-sdk 1.44.0 which is incompatible.\u001b[0m\u001b[31m\n",
+      "\u001b[0mSuccessfully installed bcrypt-5.0.0 build-1.5.0 chromadb-1.5.9 durationpy-0.10 importlib-resources-7.1.0 kubernetes-36.0.3 langchain-chroma-1.1.0 onnxruntime-1.29.0 opentelemetry-api-1.44.0 opentelemetry-exporter-otlp-proto-common-1.44.0 opentelemetry-exporter-otlp-proto-grpc-1.44.0 opentelemetry-proto-1.44.0 opentelemetry-sdk-1.44.0 opentelemetry-semantic-conventions-0.65b0 overrides-7.7.0 pybase64-1.5.0 pypika-0.51.1 pyproject_hooks-1.2.0\n",
+      "Collecting langchain-huggingface\n",
+      "  Downloading langchain_huggingface-1.2.2-py3-none-any.whl.metadata (4.0 kB)\n",
+      "Requirement already satisfied: sentence-transformers in /usr/local/lib/python3.13/dist-packages (5.7.0)\n",
+      "Collecting sentence-transformers\n",
+      "  Downloading sentence_transformers-6.0.0-py3-none-any.whl.metadata (20 kB)\n",
+      "Requirement already satisfied: huggingface-hub<2.0.0,>=0.33.4 in /usr/local/lib/python3.13/dist-packages (from langchain-huggingface) (1.27.0)\n",
+      "Requirement already satisfied: langchain-core<2.0.0,>=1.2.31 in /usr/local/lib/python3.13/dist-packages (from langchain-huggingface) (1.6.0)\n",
+      "Requirement already satisfied: tokenizers<1.0.0,>=0.19.1 in /usr/local/lib/python3.13/dist-packages (from langchain-huggingface) (0.22.2)\n",
+      "Requirement already satisfied: transformers<6.0.0,>=5.0.0 in /usr/local/lib/python3.13/dist-packages (from sentence-transformers) (5.15.0)\n",
+      "Requirement already satisfied: torch>=2.2 in /usr/local/lib/python3.13/dist-packages (from sentence-transformers) (2.11.0+cpu)\n",
+      "Requirement already satisfied: numpy>=1.24.0 in /usr/local/lib/python3.13/dist-packages (from sentence-transformers) (2.1.3)\n",
+      "Requirement already satisfied: scikit-learn>=1.1.0 in /usr/local/lib/python3.13/dist-packages (from sentence-transformers) (1.6.1)\n",
+      "Requirement already satisfied: scipy>=1.0.0 in /usr/local/lib/python3.13/dist-packages (from sentence-transformers) (1.16.3)\n",
+      "Requirement already satisfied: typing_extensions>=4.10.0 in /usr/local/lib/python3.13/dist-packages (from sentence-transformers) (4.16.0)\n",
+      "Requirement already satisfied: tqdm>=4.0.0 in /usr/local/lib/python3.13/dist-packages (from sentence-transformers) (4.67.3)\n",
+      "Requirement already satisfied: click<9.0.0,>=8.4.2 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (8.4.2)\n",
+      "Requirement already satisfied: filelock>=3.10.0 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (3.32.3)\n",
+      "Requirement already satisfied: fsspec>=2023.5.0 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (2025.3.0)\n",
+      "Requirement already satisfied: hf-xet<2.0.0,>=1.5.2 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (1.6.0)\n",
+      "Requirement already satisfied: httpx<1,>=0.23.0 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (0.28.1)\n",
+      "Requirement already satisfied: packaging>=20.9 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (26.3)\n",
+      "Requirement already satisfied: pyyaml>=5.1 in /usr/local/lib/python3.13/dist-packages (from huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (6.0.3)\n",
+      "Requirement already satisfied: jsonpatch<2.0.0,>=1.33.0 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (1.33)\n",
+      "Requirement already satisfied: langchain-protocol>=0.0.17 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (0.0.18)\n",
+      "Requirement already satisfied: langsmith<1.0.0,>=0.3.45 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (0.11.0)\n",
+      "Requirement already satisfied: pydantic<3.0.0,>=2.7.4 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (2.13.4)\n",
+      "Requirement already satisfied: tenacity!=8.4.0,<10.0.0,>=8.1.0 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (9.1.4)\n",
+      "Requirement already satisfied: uuid-utils<1.0,>=0.12.0 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (0.17.0)\n",
+      "Requirement already satisfied: joblib>=1.2.0 in /usr/local/lib/python3.13/dist-packages (from scikit-learn>=1.1.0->sentence-transformers) (1.5.3)\n",
+      "Requirement already satisfied: threadpoolctl>=3.1.0 in /usr/local/lib/python3.13/dist-packages (from scikit-learn>=1.1.0->sentence-transformers) (3.6.0)\n",
+      "Requirement already satisfied: setuptools<82 in /usr/local/lib/python3.13/dist-packages (from torch>=2.2->sentence-transformers) (75.2.0)\n",
+      "Requirement already satisfied: sympy>=1.13.3 in /usr/local/lib/python3.13/dist-packages (from torch>=2.2->sentence-transformers) (1.14.0)\n",
+      "Requirement already satisfied: networkx>=2.5.1 in /usr/local/lib/python3.13/dist-packages (from torch>=2.2->sentence-transformers) (3.6.1)\n",
+      "Requirement already satisfied: jinja2 in /usr/local/lib/python3.13/dist-packages (from torch>=2.2->sentence-transformers) (3.1.6)\n",
+      "Requirement already satisfied: regex>=2025.10.22 in /usr/local/lib/python3.13/dist-packages (from transformers<6.0.0,>=5.0.0->sentence-transformers) (2025.11.3)\n",
+      "Requirement already satisfied: typer in /usr/local/lib/python3.13/dist-packages (from transformers<6.0.0,>=5.0.0->sentence-transformers) (0.27.1)\n",
+      "Requirement already satisfied: safetensors>=0.8.0 in /usr/local/lib/python3.13/dist-packages (from transformers<6.0.0,>=5.0.0->sentence-transformers) (0.8.0)\n",
+      "Requirement already satisfied: anyio in /usr/local/lib/python3.13/dist-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (4.14.2)\n",
+      "Requirement already satisfied: certifi in /usr/local/lib/python3.13/dist-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (2026.7.22)\n",
+      "Requirement already satisfied: httpcore==1.* in /usr/local/lib/python3.13/dist-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (1.0.9)\n",
+      "Requirement already satisfied: idna in /usr/local/lib/python3.13/dist-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (3.18)\n",
+      "Requirement already satisfied: h11>=0.16 in /usr/local/lib/python3.13/dist-packages (from httpcore==1.*->httpx<1,>=0.23.0->huggingface-hub<2.0.0,>=0.33.4->langchain-huggingface) (0.16.0)\n",
+      "Requirement already satisfied: jsonpointer>=1.9 in /usr/local/lib/python3.13/dist-packages (from jsonpatch<2.0.0,>=1.33.0->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (3.1.1)\n",
+      "Requirement already satisfied: distro>=1.7.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (1.9.0)\n",
+      "Requirement already satisfied: orjson>=3.9.14 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (3.12.0)\n",
+      "Requirement already satisfied: requests-toolbelt>=1.0.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (1.0.0)\n",
+      "Requirement already satisfied: requests>=2.0.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (2.32.4)\n",
+      "Requirement already satisfied: sniffio>=1.1 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (1.3.1)\n",
+      "Requirement already satisfied: websockets>=15.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (15.0.1)\n",
+      "Requirement already satisfied: xxhash>=3.0.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (4.0.1)\n",
+      "Requirement already satisfied: zstandard>=0.23.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (0.25.0)\n",
+      "Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.13/dist-packages (from pydantic<3.0.0,>=2.7.4->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (0.8.0)\n",
+      "Requirement already satisfied: pydantic-core==2.46.4 in /usr/local/lib/python3.13/dist-packages (from pydantic<3.0.0,>=2.7.4->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (2.46.4)\n",
+      "Requirement already satisfied: typing-inspection>=0.4.2 in /usr/local/lib/python3.13/dist-packages (from pydantic<3.0.0,>=2.7.4->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (0.4.4)\n",
+      "Requirement already satisfied: mpmath<1.4,>=1.1.0 in /usr/local/lib/python3.13/dist-packages (from sympy>=1.13.3->torch>=2.2->sentence-transformers) (1.3.0)\n",
+      "Requirement already satisfied: MarkupSafe>=2.0 in /usr/local/lib/python3.13/dist-packages (from jinja2->torch>=2.2->sentence-transformers) (3.0.3)\n",
+      "Requirement already satisfied: shellingham>=1.3.0 in /usr/local/lib/python3.13/dist-packages (from typer->transformers<6.0.0,>=5.0.0->sentence-transformers) (1.5.4)\n",
+      "Requirement already satisfied: rich>=13.8.0 in /usr/local/lib/python3.13/dist-packages (from typer->transformers<6.0.0,>=5.0.0->sentence-transformers) (13.9.4)\n",
+      "Requirement already satisfied: annotated-doc>=0.0.2 in /usr/local/lib/python3.13/dist-packages (from typer->transformers<6.0.0,>=5.0.0->sentence-transformers) (0.0.5)\n",
+      "Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.13/dist-packages (from requests>=2.0.0->langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (3.4.9)\n",
+      "Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.13/dist-packages (from requests>=2.0.0->langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.2.31->langchain-huggingface) (2.5.0)\n",
+      "Requirement already satisfied: markdown-it-py>=2.2.0 in /usr/local/lib/python3.13/dist-packages (from rich>=13.8.0->typer->transformers<6.0.0,>=5.0.0->sentence-transformers) (4.2.0)\n",
+      "Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /usr/local/lib/python3.13/dist-packages (from rich>=13.8.0->typer->transformers<6.0.0,>=5.0.0->sentence-transformers) (2.21.0)\n",
+      "Requirement already satisfied: mdurl~=0.1 in /usr/local/lib/python3.13/dist-packages (from markdown-it-py>=2.2.0->rich>=13.8.0->typer->transformers<6.0.0,>=5.0.0->sentence-transformers) (0.1.2)\n",
+      "Downloading langchain_huggingface-1.2.2-py3-none-any.whl (31 kB)\n",
+      "Downloading sentence_transformers-6.0.0-py3-none-any.whl (739 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m739.6/739.6 kB\u001b[0m \u001b[31m31.6 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hInstalling collected packages: langchain-huggingface, sentence-transformers\n",
+      "  Attempting uninstall: sentence-transformers\n",
+      "    Found existing installation: sentence-transformers 5.7.0\n",
+      "    Uninstalling sentence-transformers-5.7.0:\n",
+      "      Successfully uninstalled sentence-transformers-5.7.0\n",
+      "Successfully installed langchain-huggingface-1.2.2 sentence-transformers-6.0.0\n",
+      "Collecting langchain-groq\n",
+      "  Downloading langchain_groq-1.1.3-py3-none-any.whl.metadata (2.9 kB)\n",
+      "Collecting groq<1.0.0,>=0.30.0 (from langchain-groq)\n",
+      "  Downloading groq-0.37.1-py3-none-any.whl.metadata (16 kB)\n",
+      "Requirement already satisfied: langchain-core<2.0.0,>=1.4.0 in /usr/local/lib/python3.13/dist-packages (from langchain-groq) (1.6.0)\n",
+      "Requirement already satisfied: anyio<5,>=3.5.0 in /usr/local/lib/python3.13/dist-packages (from groq<1.0.0,>=0.30.0->langchain-groq) (4.14.2)\n",
+      "Requirement already satisfied: distro<2,>=1.7.0 in /usr/local/lib/python3.13/dist-packages (from groq<1.0.0,>=0.30.0->langchain-groq) (1.9.0)\n",
+      "Requirement already satisfied: httpx<1,>=0.23.0 in /usr/local/lib/python3.13/dist-packages (from groq<1.0.0,>=0.30.0->langchain-groq) (0.28.1)\n",
+      "Requirement already satisfied: pydantic<3,>=1.9.0 in /usr/local/lib/python3.13/dist-packages (from groq<1.0.0,>=0.30.0->langchain-groq) (2.13.4)\n",
+      "Requirement already satisfied: sniffio in /usr/local/lib/python3.13/dist-packages (from groq<1.0.0,>=0.30.0->langchain-groq) (1.3.1)\n",
+      "Requirement already satisfied: typing-extensions<5,>=4.10 in /usr/local/lib/python3.13/dist-packages (from groq<1.0.0,>=0.30.0->langchain-groq) (4.16.0)\n",
+      "Requirement already satisfied: jsonpatch<2.0.0,>=1.33.0 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.4.0->langchain-groq) (1.33)\n",
+      "Requirement already satisfied: langchain-protocol>=0.0.17 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.4.0->langchain-groq) (0.0.18)\n",
+      "Requirement already satisfied: langsmith<1.0.0,>=0.3.45 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.4.0->langchain-groq) (0.11.0)\n",
+      "Requirement already satisfied: packaging>=23.2.0 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.4.0->langchain-groq) (26.3)\n",
+      "Requirement already satisfied: pyyaml<7.0.0,>=5.3.0 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.4.0->langchain-groq) (6.0.3)\n",
+      "Requirement already satisfied: tenacity!=8.4.0,<10.0.0,>=8.1.0 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.4.0->langchain-groq) (9.1.4)\n",
+      "Requirement already satisfied: uuid-utils<1.0,>=0.12.0 in /usr/local/lib/python3.13/dist-packages (from langchain-core<2.0.0,>=1.4.0->langchain-groq) (0.17.0)\n",
+      "Requirement already satisfied: idna>=2.8 in /usr/local/lib/python3.13/dist-packages (from anyio<5,>=3.5.0->groq<1.0.0,>=0.30.0->langchain-groq) (3.18)\n",
+      "Requirement already satisfied: certifi in /usr/local/lib/python3.13/dist-packages (from httpx<1,>=0.23.0->groq<1.0.0,>=0.30.0->langchain-groq) (2026.7.22)\n",
+      "Requirement already satisfied: httpcore==1.* in /usr/local/lib/python3.13/dist-packages (from httpx<1,>=0.23.0->groq<1.0.0,>=0.30.0->langchain-groq) (1.0.9)\n",
+      "Requirement already satisfied: h11>=0.16 in /usr/local/lib/python3.13/dist-packages (from httpcore==1.*->httpx<1,>=0.23.0->groq<1.0.0,>=0.30.0->langchain-groq) (0.16.0)\n",
+      "Requirement already satisfied: jsonpointer>=1.9 in /usr/local/lib/python3.13/dist-packages (from jsonpatch<2.0.0,>=1.33.0->langchain-core<2.0.0,>=1.4.0->langchain-groq) (3.1.1)\n",
+      "Requirement already satisfied: orjson>=3.9.14 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.4.0->langchain-groq) (3.12.0)\n",
+      "Requirement already satisfied: requests-toolbelt>=1.0.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.4.0->langchain-groq) (1.0.0)\n",
+      "Requirement already satisfied: requests>=2.0.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.4.0->langchain-groq) (2.32.4)\n",
+      "Requirement already satisfied: websockets>=15.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.4.0->langchain-groq) (15.0.1)\n",
+      "Requirement already satisfied: xxhash>=3.0.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.4.0->langchain-groq) (4.0.1)\n",
+      "Requirement already satisfied: zstandard>=0.23.0 in /usr/local/lib/python3.13/dist-packages (from langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.4.0->langchain-groq) (0.25.0)\n",
+      "Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.13/dist-packages (from pydantic<3,>=1.9.0->groq<1.0.0,>=0.30.0->langchain-groq) (0.8.0)\n",
+      "Requirement already satisfied: pydantic-core==2.46.4 in /usr/local/lib/python3.13/dist-packages (from pydantic<3,>=1.9.0->groq<1.0.0,>=0.30.0->langchain-groq) (2.46.4)\n",
+      "Requirement already satisfied: typing-inspection>=0.4.2 in /usr/local/lib/python3.13/dist-packages (from pydantic<3,>=1.9.0->groq<1.0.0,>=0.30.0->langchain-groq) (0.4.4)\n",
+      "Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.13/dist-packages (from requests>=2.0.0->langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.4.0->langchain-groq) (3.4.9)\n",
+      "Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.13/dist-packages (from requests>=2.0.0->langsmith<1.0.0,>=0.3.45->langchain-core<2.0.0,>=1.4.0->langchain-groq) (2.5.0)\n",
+      "Downloading langchain_groq-1.1.3-py3-none-any.whl (20 kB)\n",
+      "Downloading groq-0.37.1-py3-none-any.whl (137 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m137.5/137.5 kB\u001b[0m \u001b[31m9.1 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hInstalling collected packages: groq, langchain-groq\n",
+      "Successfully installed groq-0.37.1 langchain-groq-1.1.3\n",
+      "Collecting trafilatura\n",
+      "  Downloading trafilatura-2.2.0-py3-none-any.whl.metadata (13 kB)\n",
+      "Requirement already satisfied: certifi in /usr/local/lib/python3.13/dist-packages (from trafilatura) (2026.7.22)\n",
+      "Requirement already satisfied: charset_normalizer>=3.4.9 in /usr/local/lib/python3.13/dist-packages (from trafilatura) (3.4.9)\n",
+      "Collecting courlan>=1.4.0 (from trafilatura)\n",
+      "  Downloading courlan-1.4.0-py3-none-any.whl.metadata (18 kB)\n",
+      "Collecting htmldate>=1.10.0 (from trafilatura)\n",
+      "  Downloading htmldate-1.10.0-py3-none-any.whl.metadata (9.8 kB)\n",
+      "Collecting justext>=3.0.2 (from trafilatura)\n",
+      "  Downloading justext-3.0.2-py2.py3-none-any.whl.metadata (7.3 kB)\n",
+      "Requirement already satisfied: lxml>=6.1.1 in /usr/local/lib/python3.13/dist-packages (from trafilatura) (6.1.1)\n",
+      "Requirement already satisfied: urllib3<3,>=1.26 in /usr/local/lib/python3.13/dist-packages (from trafilatura) (2.5.0)\n",
+      "Requirement already satisfied: babel>=2.16.0 in /usr/local/lib/python3.13/dist-packages (from courlan>=1.4.0->trafilatura) (2.18.0)\n",
+      "Collecting tld>=0.13 (from courlan>=1.4.0->trafilatura)\n",
+      "  Downloading tld-0.13.2-py2.py3-none-any.whl.metadata (11 kB)\n",
+      "Collecting dateparser>=1.1.2 (from htmldate>=1.10.0->trafilatura)\n",
+      "  Downloading dateparser-1.4.2-py3-none-any.whl.metadata (24 kB)\n",
+      "Requirement already satisfied: python-dateutil>=2.9.0.post0 in /usr/local/lib/python3.13/dist-packages (from htmldate>=1.10.0->trafilatura) (2.9.0.post0)\n",
+      "Requirement already satisfied: pytz>=2024.2 in /usr/local/lib/python3.13/dist-packages (from dateparser>=1.1.2->htmldate>=1.10.0->trafilatura) (2025.2)\n",
+      "Requirement already satisfied: regex>=2024.9.11 in /usr/local/lib/python3.13/dist-packages (from dateparser>=1.1.2->htmldate>=1.10.0->trafilatura) (2025.11.3)\n",
+      "Requirement already satisfied: tzlocal>=0.2 in /usr/local/lib/python3.13/dist-packages (from dateparser>=1.1.2->htmldate>=1.10.0->trafilatura) (5.4.4)\n",
+      "Collecting lxml_html_clean (from lxml[html_clean]>=4.4.2->justext>=3.0.2->trafilatura)\n",
+      "  Downloading lxml_html_clean-0.4.5-py3-none-any.whl.metadata (2.4 kB)\n",
+      "Requirement already satisfied: six>=1.5 in /usr/local/lib/python3.13/dist-packages (from python-dateutil>=2.9.0.post0->htmldate>=1.10.0->trafilatura) (1.17.0)\n",
+      "Downloading trafilatura-2.2.0-py3-none-any.whl (151 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m151.9/151.9 kB\u001b[0m \u001b[31m11.3 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading courlan-1.4.0-py3-none-any.whl (34 kB)\n",
+      "Downloading htmldate-1.10.0-py3-none-any.whl (31 kB)\n",
+      "Downloading justext-3.0.2-py2.py3-none-any.whl (837 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m837.9/837.9 kB\u001b[0m \u001b[31m41.0 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading dateparser-1.4.2-py3-none-any.whl (316 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m316.5/316.5 kB\u001b[0m \u001b[31m20.8 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading tld-0.13.2-py2.py3-none-any.whl (296 kB)\n",
+      "\u001b[2K   \u001b[90m\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u001b[0m \u001b[32m296.7/296.7 kB\u001b[0m \u001b[31m15.5 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+      "\u001b[?25hDownloading lxml_html_clean-0.4.5-py3-none-any.whl (14 kB)\n",
+      "Installing collected packages: tld, lxml_html_clean, dateparser, courlan, justext, htmldate, trafilatura\n",
+      "Successfully installed courlan-1.4.0 dateparser-1.4.2 htmldate-1.10.0 justext-3.0.2 lxml_html_clean-0.4.5 tld-0.13.2 trafilatura-2.2.0\n"
+     ]
+    }
+   ],
+   "source": [
+    "!pip install -U chromadb langchain-chroma\n",
+    "!pip install -U langchain-huggingface sentence-transformers\n",
+    "!pip install -U langchain-groq\n",
+    "!pip install -U trafilatura"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "xvez9_W8pLzQ"
+   },
+   "outputs": [],
+   "source": [
+    "from dotenv import load_dotenv\nfrom pydantic import BaseModel,Field\nfrom bs4 import BeautifulSoup\nfrom langchain_core.prompts import ChatPromptTemplate\nfrom langchain_chroma import Chroma\nfrom langchain_tavily import TavilySearch\nimport requests\nfrom langchain_groq import ChatGroq\nimport streamlit as st\nimport trafilatura\nfrom typing import TypedDict, Annotated, Literal\nfrom langchain_core.documents import Document\nfrom langchain_core.messages import BaseMessage\nimport logging\nimport os\nimport time\nfrom datetime import datetime\nfrom langgraph.graph import StateGraph,START,END\n\ndef now_iso():\n    return datetime.utcnow().isoformat() + \"Z\"\n\ndef upsert_citation(citation_store, *, title, url, source, snippet=\"\", used_in=None):\n    \"\"\"Shared, deduped-by-URL citation & source-metadata store.\n    Lives inside ResearchState['citation_store'].\"\"\"\n    existing = citation_store.get(url)\n    if existing:\n        if used_in and used_in not in existing.get(\"used_in\", []):\n            existing[\"used_in\"].append(used_in)\n    else:\n        citation_store[url] = {\n            \"title\": title,\n            \"url\": url,\n            \"source\": source,\n            \"snippet\": snippet,\n            \"fetched_at\": now_iso(),\n            \"used_in\": [used_in] if used_in else [],\n        }\n    return citation_store\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "source": [
+    "# API keys are loaded from .env in the next cell \u2014 nothing hardcoded here.\n"
+   ],
+   "metadata": {
+    "id": "g0_MIvDl1wy4"
+   },
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "qMdntOAQ0Xzs"
+   },
+   "outputs": [],
+   "source": [
+    "load_dotenv()\nGROQ_API_KEY=os.getenv(\"GROQ_API_KEY\")\nTAVILY_API_KEY=os.getenv(\"TAVILY_API_KEY\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "sRAxffoW0_lz",
+    "colab": {
+     "base_uri": "https://localhost:8080/",
+     "height": 460
+    },
+    "collapsed": true,
+    "outputId": "ba664a2d-3d4c-4548-a2c0-0d26d886a37d"
+   },
+   "outputs": [],
+   "source": [
+    "llm=ChatGroq(\n   model=\"llama-3.3-70b-versatile\",\n   temperature=0\n)\nresponse=llm.invoke(\"Hello, are you working?\")\nprint(response.content)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/"
+    },
+    "id": "2aKHMgP_Y2jW",
+    "outputId": "98df97a2-3243-435d-fb52-d27bb9969c83"
+   },
+   "outputs": [],
+   "source": [
+    "class ResearchState(TypedDict):\n  query:str\n  search_results:list\n  sources:list\n  reader_outputs:list\n  analysis:dict|None\n  report:dict|None\n  critic_feedback:dict|None\n  final_report:dict|None\n  citation_store:dict\n  revision_count:int\n  max_revisions:int\n  errors:list\n  events:list\n  plan:dict|None\n\ninitial_state: ResearchState = {\n    \"query\": \"Impact of artificial intelligence on education\",\n    \"search_results\": [],\n    \"sources\": [],\n    \"reader_outputs\": [],\n    \"analysis\": None,\n    \"report\": None,\n    \"critic_feedback\": None,\n    \"final_report\": None,\n    \"citation_store\": {},\n    \"revision_count\": 0,\n    \"max_revisions\": 2,\n    \"errors\": [],\n    \"events\": [],\n    \"plan\": None\n}\n\nprint(initial_state)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "KwPwFhEBcuXh"
+   },
+   "outputs": [],
+   "source": [
+    "class plannerOutPut(BaseModel):\n  plan_id:str=Field(description=\"short unique id for this plan\")\n  subtopics:list[str]=Field(description=\"3-5 subtopics to research\")\n  strategy:str=Field(description=\"brief search strategy\")\n\ndef planner_node(state:ResearchState)->ResearchState:\n    prompt=ChatPromptTemplate.from_messages([\n        (\"system\", \"You break a research query into a clear plan with 3-5 subtopics.\"),\n        (\"human\", \"Query: {query}\")\n    ])\n    Structured_llm=llm.with_structured_output(plannerOutPut)\n    chain=prompt|Structured_llm\n    result=chain.invoke({\"query\":state[\"query\"]})\n\n    state[\"events\"].append({\"node\":\"planner\",\"status\":\"success\"})\n    state[\"plan\"]=result.model_dump()\n    return state\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "collapsed": true,
+    "id": "Cfu78icUy83T"
+   },
+   "outputs": [],
+   "source": [
+    "class SearchResultItem(BaseModel):\n   title:str\n   url:str\n   snippet:str\n\nclass RetrieverOutPut(BaseModel):\n   subtopic:str\n   results:list[SearchResultItem]\n\nTavily=TavilySearch(max_results=5,api_key=TAVILY_API_KEY)\n\ndef retriever_node(state:ResearchState)->ResearchState:\n  subtopics=state[\"plan\"][\"subtopics\"]\n  all_results=[]\n  all_sources=[]\n  citation_store=state.setdefault(\"citation_store\",{})\n\n  for topic in subtopics:\n    raw=Tavily.invoke({\"query\":topic})\n    raw_result=raw.get(\"results\",[]) if isinstance(raw,dict) else raw\n\n    for r in raw_result:\n      item={\n          \"title\": r.get(\"title\", \"\"),\n          \"url\": r.get(\"url\", \"\"),\n          \"snippet\": r.get(\"content\", r.get(\"snippet\", \"\"))\n      }\n      all_results.append(item)\n      all_sources.append({\"title\":item[\"title\"],\"url\":item[\"url\"]})\n      upsert_citation(citation_store, title=item[\"title\"], url=item[\"url\"],\n                       source=\"web_search\", snippet=item[\"snippet\"], used_in=\"retriever\")\n\n  state[\"search_results\"]=all_results\n  state[\"sources\"]=all_sources\n  state[\"events\"].append({\"node\":\"retriever\",\"status\":\"success\"})\n  return state\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "u5GQiBG35EwT"
+   },
+   "outputs": [],
+   "source": [
+    "class ReaderOutPut(BaseModel):\n  url:str\n  title:str\n  key_points:list[str]\n  summary:str\n\ndef scrape_url(url:str)->str:\n  downloaded=trafilatura.fetch_url(url)\n  if downloaded is None:\n    raise ValueError(f\"Could not fetch {url}\")\n  text = trafilatura.extract(downloaded)\n  if not text:\n    raise ValueError(f\"No extractable text at {url}\")\n  return text\n\ndef reader_node(state:ResearchState)->ResearchState:\n  prompt=ChatPromptTemplate.from_messages([\n      (\"system\", \"You read scraped page text and extract key points and a short summary. Do not invent facts not in the text.\"),\n      (\"human\", \"URL: {url}\\nTitle: {title}\\n\\nText:\\n{text}\")\n  ])\n  structured_llm=llm.with_structured_output(ReaderOutPut)\n  chain=prompt|structured_llm\n\n  citation_store=state.setdefault(\"citation_store\",{})\n  reader_outputs=[]\n  for src in state[\"sources\"]:\n    try:\n      text=scrape_url(src[\"url\"])\n    except Exception as e:\n        state[\"errors\"].append({\"node\": \"reader\", \"url\": src[\"url\"], \"error\": str(e)})\n        continue\n\n    result=chain.invoke({\n        \"url\": src[\"url\"],\n        \"title\": src[\"title\"],\n        \"text\": text\n    })\n    reader_outputs.append(result.model_dump())\n    upsert_citation(citation_store, title=result.title or src[\"title\"], url=result.url or src[\"url\"],\n                     source=\"web\", snippet=result.summary[:200], used_in=\"reader\")\n\n  state[\"reader_outputs\"]=reader_outputs\n  state[\"events\"].append({\"node\": \"reader\", \"status\": \"success\", \"count\": len(reader_outputs)})\n  return state\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "EpU5MNNhQG6j"
+   },
+   "outputs": [],
+   "source": [
+    "class AnalayerOutPut(BaseModel):\n  findings:list[str]\n  themes:list[str]\n  insights: list[str]\n  citation:list[str]\n\ndef analyzer_node(state:ResearchState)->ResearchState:\n  combined=\"\\n\\n\".join(\n        f\"Source: {r['url']}\\nTitle: {r['title']}\\nSummary: {r['summary']}\\nKey points: {r['key_points']}\"\n        for r in state[\"reader_outputs\"]\n    )\n  prompt=ChatPromptTemplate.from_messages([\n      (\"system\",\n         \"You synthesize research findings across multiple sources. \"\n         \"Identify common themes, key findings, and insights. \"\n         \"Every finding must be traceable to a source below \u2014 cite the URL.\"),\n        (\"human\", \"Query: {query}\\n\\nSource material:\\n{combined}\")\n  ])\n  structured_llm=llm.with_structured_output(AnalayerOutPut)\n  chain=prompt|structured_llm\n\n  result=chain.invoke({\n      \"query\": state[\"query\"],\n        \"combined\": combined or \"no sources available\"\n  })\n\n  state[\"analysis\"]=result.model_dump()\n  state[\"events\"].append({\"node\": \"analyzer\", \"status\": \"success\"})\n  return state\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "tazPP6diSw1j"
+   },
+   "outputs": [],
+   "source": [
+    "class WriterOutPut(BaseModel):\n  draft:str\n  citation:list[str]\n  reference: list[dict]\n\ndef writer_node(state:ResearchState)->ResearchState:\n  is_revision=state[\"revision_count\"]>0\n  feedback=state[\"critic_feedback\"][\"feedback\"] if is_revision and state[\"critic_feedback\"] else \"\"\n\n  system=(\n      \"You write a clear, well-structured research report from the analysis below. \"\n      \"Cite sources by URL. Do not include claims not supported by the findings.\"\n  )\n  if is_revision:\n    system+=\" This is a REVISION \u2014 directly address the critic feedback provided.\"\n\n  prompt=ChatPromptTemplate.from_messages([\n      (\"system\", system),\n      (\"human\",\n       \"Query: {query}\\n\\n\"\n       \"Findings: {findings}\\nThemes: {themes}\\nInsights: {insights}\\n\\n\"\n       \"Available sources:\\n{sources}\\n\\n\"\n       \"Critic feedback (empty if first draft):\\n{feedback}\")\n  ])\n  structured_llm=llm.with_structured_output(WriterOutPut)\n  chain=prompt|structured_llm\n\n  result=chain.invoke({\n      \"query\": state[\"query\"],\n      \"findings\": state[\"analysis\"][\"findings\"],\n      \"themes\": state[\"analysis\"][\"themes\"],\n      \"insights\": state[\"analysis\"][\"insights\"],\n      \"sources\": state[\"sources\"],\n      \"feedback\": feedback\n  })\n\n  state[\"report\"]=result.model_dump()\n  state[\"events\"].append({\n      \"node\": \"writer\",\n      \"status\": \"success\",\n      \"revision\": state[\"revision_count\"]\n  })\n  return state\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "MB-h8nR_WLax"
+   },
+   "outputs": [],
+   "source": [
+    "class CriticOutPut(BaseModel):\n  score:int=Field(ge=0,le=100)\n  feedback:str\n  issues:list[str]\n  sugeest:list[str]\n  citation_check:Literal[\"valid\", \"missing\", \"partial\"]\n\ndef critic_node(state:ResearchState)->ResearchState:\n  prompt=ChatPromptTemplate.from_messages([\n      (\"system\",\n         \"You are a strict evaluator of research report drafts. \"\n         \"Score 0-100 on accuracy, completeness, and citation quality. \"\n         \"Be specific about what's missing or wrong.\"),\n        (\"human\",\n         \"Query: {query}\\n\\nDraft:\\n{draft}\\n\\nCitations used:\\n{citations}\")\n  ])\n\n  structured_llm=llm.with_structured_output(CriticOutPut)\n  chain=prompt|structured_llm\n\n  result=chain.invoke({\n      \"query\": state[\"query\"],\n        \"draft\": state[\"report\"][\"draft\"],\n        \"citations\": state[\"report\"].get(\"citation\", [])\n  })\n\n  state[\"critic_feedback\"]=result.model_dump()\n  state[\"events\"].append({\n      \"node\": \"critic\",\n        \"status\": \"success\",\n        \"score\": result.score\n  })\n\n  return state\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "id": "TVVwfOFiZa_x"
+   },
+   "outputs": [],
+   "source": [
+    "class PublisherOutPut(BaseModel):\n  report:str\n  reference: list[dict]\n  citation:list[str]\n  metadata:dict\n\ndef publisher_node(state:ResearchState)->ResearchState:\n  prompt=ChatPromptTemplate.from_messages([\n      (\"system\",\n         \"You format an approved research draft into a clean final report \"\n         \"with a title, clear sections, and a references list. \"\n         \"Do not change facts or add new claims \u2014 formatting only.\"),\n        (\"human\", \"Draft:\\n{draft}\\n\\nSources:\\n{sources}\")\n  ])\n\n  structured_llm=llm.with_structured_output(PublisherOutPut)\n  chain=prompt|structured_llm\n\n  result=chain.invoke({\n      \"draft\": state[\"report\"][\"draft\"],\n        \"sources\": state[\"sources\"]\n  })\n\n  final=result.model_dump()\n  final[\"metadata\"]={\n      **final.get(\"metadata\", {}),\n      \"critic_score\": state[\"critic_feedback\"][\"score\"],\n      \"critic_summary\": state[\"critic_feedback\"][\"feedback\"],\n      \"revision_count\": state[\"revision_count\"],\n  }\n  final[\"all_sources\"]=list(state.get(\"citation_store\", {}).values())\n\n  state[\"final_report\"]=final\n  state[\"events\"].append({\"node\": \"publisher\", \"status\": \"success\"})\n  return state\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "colab": {
+     "base_uri": "https://localhost:8080/",
+     "height": 0
+    },
+    "collapsed": true,
+    "id": "zBrAAFcnmuVw",
+    "outputId": "e7f5bffb-6fb6-41dc-fefa-0d931eb8aaed"
+   },
+   "outputs": [],
+   "source": [
+    "graph=StateGraph(ResearchState)\ngraph.add_node(\"planner\",with_retry(\"planner\")(planner_node))\ngraph.add_node(\"retriever\",with_retry(\"retriever\")(retriever_node))\ngraph.add_node(\"reader\",with_retry(\"reader\")(reader_node))\ngraph.add_node(\"analyzer\",with_retry(\"analyzer\")(analyzer_node))\ngraph.add_node(\"writer\",with_retry(\"writer\")(writer_node))\ngraph.add_node(\"critic\",with_retry(\"critic\")(critic_node))\ngraph.add_node(\"publisher\",with_retry(\"publisher\")(publisher_node))\n\ngraph.add_edge(START,\"planner\")\ngraph.add_edge(\"planner\",\"retriever\")\ngraph.add_edge(\"retriever\",\"reader\")\ngraph.add_edge(\"reader\",\"analyzer\")\ngraph.add_edge(\"analyzer\",\"writer\")\ngraph.add_edge(\"writer\",\"critic\")\n\ndef route_after_critic(state: ResearchState) -> str:\n    score = state[\"critic_feedback\"][\"score\"]\n    if score >= 75 or state[\"revision_count\"] >= state[\"max_revisions\"]:\n        return \"publisher\"\n    state[\"revision_count\"] += 1\n    return \"writer\"\n\ngraph.add_conditional_edges(\"critic\",route_after_critic,\n    {\"writer\": \"writer\", \"publisher\": \"publisher\"})\ngraph.add_edge(\"publisher\",END)\n\napp=graph.compile()\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "source": [
+    "logging.basicConfig(level=logging.INFO,format=\"%(asctime)s | %(levelname)s | %(message)s\")\nlogger=logging.getLogger(\"Research_Pipline\")\n\ndef log_event(state:ResearchState,node:str,status:str,detail:str=\"\"):\n  entry={\"node\":node,\"status\":status,\"detail\":detail,\"time\":time.time()}\n  state[\"events\"].append(entry)\n  if status==\"error\":\n    logger.error(f\"[{node}] {detail}\")\n  else:\n    logger.info(f\"[{node},{status},{detail}]\")\n\ndef with_retry(node_name, max_attempts=3, backoff=1.5):\n    def decorator(fn):\n        def wrapper(state: ResearchState) -> ResearchState:\n            attempt = 0\n            while attempt < max_attempts:\n                attempt += 1\n                try:\n                    log_event(state, node_name, \"start\", f\"attempt {attempt}\")\n                    result = fn(state)\n                    log_event(state, node_name, \"success\")\n                    return result\n                except Exception as e:\n                    if attempt < max_attempts:\n                        log_event(state, node_name, \"retry\", str(e))\n                        time.sleep(backoff * attempt)\n                    else:\n                        log_event(state, node_name, \"error\", str(e))\n                        state[\"errors\"].append({\"node\": node_name, \"error\": str(e)})\n                        raise\n        return wrapper\n    return decorator\n"
+   ],
+   "metadata": {
+    "id": "itu6BwftqgyU"
+   },
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": [
+    "class Orchestrator:\n  def __init__(self,compiled_graph,max_revisions:int=2):\n    self.app=compiled_graph\n    self.max_revisions=max_revisions\n\n  def build_initial_state(self,query:str)->ResearchState:\n    return {\n        \"query\": query,\n        \"search_results\": [],\n        \"sources\": [],\n        \"reader_outputs\": [],\n        \"plan\": None,\n        \"analysis\": None,\n        \"report\": None,\n        \"critic_feedback\": None,\n        \"final_report\": None,\n        \"citation_store\": {},\n        \"revision_count\": 0,\n        \"max_revisions\": self.max_revisions,\n        \"errors\": [],\n        \"events\": [],\n    }\n\n  def run(self,query:str)->dict:\n       state=self.build_initial_state(query)\n       log_event(state, \"orchestrator\", \"start\", f\"query={query}\")\n\n       try:\n        result=self.app.invoke(state)\n        log_event(result,\"orchestrator\", \"success\",\n                   f\"revisions_used={result['revision_count']}\")\n\n        return {\n            \"ok\": True,\n            \"final_report\": result.get(\"final_report\"),\n            \"revision_count\": result.get(\"revision_count\"),\n            \"errors\": result.get(\"errors\", []),\n            \"events\": result.get(\"events\", []),\n        }\n       except Exception as e:\n           log_event(state, \"orchestrator\", \"error\", str(e))\n           return {\n                \"ok\": False,\n                \"error\": str(e),\n                \"errors\": state.get(\"errors\", []),\n                \"events\": state.get(\"events\", []),\n         }\n"
+   ],
+   "metadata": {
+    "id": "lXO2aL0k5fxI"
+   },
+   "execution_count": null,
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "source": [
+    "orchestrator = Orchestrator(app, max_revisions=2)\noutput = orchestrator.run(\"Impact of artificial intelligence on education\")\n\nif output[\"ok\"]:\n    print(output[\"final_report\"][\"report\"])\n    print(\"Revisions used:\", output[\"revision_count\"])\nelse:\n    print(\"Pipeline failed:\", output[\"error\"])\n\nprint(\"\\n--- EVENTS ---\")\nfor ev in output[\"events\"]:\n    print(ev)\n"
+   ],
+   "metadata": {
+    "id": "kBxdJLvC-DPn"
+   },
+   "execution_count": null,
+   "outputs": []
+  }
+ ],
+ "metadata": {
+  "colab": {
+   "provenance": []
+  },
+  "kernelspec": {
+   "display_name": "Python 3",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 0
+}

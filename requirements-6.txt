@@ -1,0 +1,13 @@
+langgraph
+langchain
+langchain-openai
+langchain-tavily
+langchain-groq
+langchain-chroma
+pydantic
+pydantic-settings
+python-dotenv
+streamlit
+requests
+beautifulsoup4
+trafilatura
