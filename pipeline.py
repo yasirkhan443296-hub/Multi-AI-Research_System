@@ -154,8 +154,6 @@ def retriever_node(state:ResearchState)->ResearchState:
 
 # ----- notebook cell 9 -----
 class ReaderOutPut(BaseModel):
-  url:str
-  title:str
   key_points:list[str]
   summary:str
 
@@ -191,7 +189,7 @@ def reader_node(state:ResearchState)->ResearchState:
         "text": text
     })
     reader_outputs.append(result.model_dump())
-    upsert_citation(citation_store, title=result.title or src["title"], url=result.url or src["url"],
+    upsert_citation(citation_store, title=result.title or src["title"], url=src["url"],
                      source="web", snippet=result.summary[:200], used_in="reader")
 
   state["reader_outputs"]=reader_outputs
