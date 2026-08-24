@@ -103,7 +103,11 @@ class plannerOutPut(BaseModel):
 
 def planner_node(state:ResearchState)->ResearchState:
     prompt=ChatPromptTemplate.from_messages([
-        ("system", "You break a research query into a clear plan with 3-5 subtopics."),
+        ("system",
+         "You break a research query into a clear plan with 3-5 subtopics. "
+         "You must always respond by producing the structured plan — never "
+         "reply conversationally, never ask clarifying questions, never greet "
+         "the user. Even for a vague or short query, infer reasonable subtopics."),
         ("human", "Query: {query}")
     ])
     Structured_llm=llm.with_structured_output(plannerOutPut)
