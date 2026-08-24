@@ -54,7 +54,8 @@ TAVILY_API_KEY=os.getenv("TAVILY_API_KEY")
 # ----- notebook cell 5 -----
 llm=ChatGroq(
    model="llama-3.3-70b-versatile",
-   temperature=0
+   temperature=0,
+   api_key=GROQ_API_KEY
 )
 response=llm.invoke("Hello, are you working?")
 print(response.content)
