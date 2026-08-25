@@ -443,7 +443,7 @@ def reader_node(state: ResearchState) -> ResearchState:
     citation_store = state.setdefault("citation_store", {})
     reader_outputs = []
 
-    MAX_READER_CHARS = 8000
+    MAX_READER_CHARS = 4000
 
     for src in state["sources"]:
         try:
