@@ -55,7 +55,7 @@ GEMINI_API_KEY=os.getenv("GEMINI_API_KEY")
 
 # ----- notebook cell 5 -----
 llm=ChatGoogleGenerativeAI(
-   model="gemini-2.5-flash-lite",
+   model="gemini-3-flash",
    temperature=0,
    api_key=GEMINI_API_KEY,
     max_output_tokens=1024
@@ -172,7 +172,7 @@ class plannerOutPut(BaseModel):
 
 def planner_node(state:ResearchState)->ResearchState:
     prompt=ChatPromptTemplate.from_messages([
-        ("system", "You break a research query into a clear plan with 3-5 subtopics."),
+        ("system", "You break a research query into a clear plan with 2 subtopics."),
         ("human", "Query: {query}")
     ])
     Structured_llm=llm.with_structured_output(plannerOutPut)
