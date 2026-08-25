@@ -530,6 +530,17 @@ def analyzer_node(state:ResearchState)->ResearchState:
          "Identify common themes, key findings, and insights. "
          "Every finding must be traceable to a source below — cite the URL."),
         ("human", "Query: {query}\n\nSource material:\n{combined}")
+
+      """Return concise analysis only.
+
+      - Maximum 5 findings.
+      - Maximum 3 insights.
+      - Each finding must be no more than 30 words.
+      - Each insight must be no more than 30 words.
+      - Keep citations concise.
+      - Do not repeat the same information.
+      - Do not add information that is not supported by the Reader output.
+      - Do not write the final report. """
   ])
   structured_llm=llm.with_structured_output(AnalayerOutPut)
   chain=prompt|structured_llm
