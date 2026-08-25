@@ -559,81 +559,82 @@ class WriterOutPut(BaseModel):
   draft:str
   citation:list[str]
   reference: list[dict]
+def writer_node(state: ResearchState) -> ResearchState:
+    analysis = state.get("analysis") or {}
+    findings = analysis.get("findings") or []
+    themes = analysis.get("themes") or []
+    insights = analysis.get("insights") or []
+    sources = state.get("sources") or []
 
-def writer_node(state:ResearchState)->ResearchState:
-  analysis = state.get("analysis") or {}
-  findings = analysis.get("findings") or []
-  themes = analysis.get("themes") or []
-  insights = analysis.get("insights") or []
-  sources = state.get("sources") or []
+    if not findings and not themes and not insights:
+        raise ValueError(
+            "Writer received no findings/themes/insights from the analyzer — "
+            "nothing to write or cite. Check analyzer_node output."
+        )
 
-  if not findings and not themes and not insights:
-    raise ValueError(
-        "Writer received no findings/themes/insights from the analyzer — "
-        "nothing to write or cite. Check analyzer_node output."
+    if not sources:
+        raise ValueError(
+            "Writer received an empty sources list — cannot cite by URL. "
+            "Check retriever_node output."
+        )
+
+    is_revision = state["revision_count"] > 0
+
+    feedback = (
+        state["critic_feedback"]["feedback"]
+        if is_revision and state["critic_feedback"]
+        else ""
     )
-  if not sources:
-    raise ValueError(
-        "Writer received an empty sources list — cannot cite by URL. "
-        "Check retriever_node output."
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "You are the Writer Agent. "
+            "Write a concise research report using only the information provided. "
+            "Do not add outside facts or speculation. "
+            "Keep the report under 700 words. "
+            "Use a title and short sections. "
+            "Include the provided source URLs as citations."
+        ),
+        (
+            "human",
+            "Research Query: {query}\n\n"
+            "Analyzer Output:\n{analysis}\n\n"
+            "Source Material:\n{combined}\n\n"
+            "Return the required WriterOutPut structured output."
+        )
+    ])
+
+    combined = "\n\n".join(
+        f"Source: {s.get('url', '')}\n"
+        f"Title: {s.get('title', '')}\n"
+        f"Content: {s.get('content', s.get('snippet', ''))}"
+        for s in sources
     )
 
-  is_revision=state["revision_count"]>0
-  feedback=state["critic_feedback"]["feedback"] if is_revision and state["critic_feedback"] else ""
+    structured_llm = llm.with_structured_output(WriterOutPut)
+    chain = prompt | structured_llm
 
-  system=(
-      "You write a clear, well-structured research report from the analysis below. "
-      "Cite sources by URL. Do not include claims not supported by the findings."
-  )
-  if is_revision:
-    system+=" This is a REVISION — directly address the critic feedback provided."
+    result = chain.invoke({
+        "query": state["query"],
+        "analysis": (
+            f"Findings:\n{findings}\n\n"
+            f"Themes:\n{themes}\n\n"
+            f"Insights:\n{insights}\n\n"
+            f"Critic Feedback:\n{feedback}"
+        ),
+        "combined": combined or "No source material available"
+    })
 
-  prompt=ChatPromptTemplate.from_messages([
-       (
-        "system",
-        "You are the Writer Agent. "
-        "Write a concise research report using only the information provided. "
-        "Do not add outside facts or speculation. "
-        "Keep the report under 700 words. "
-        "Use a title and short sections. "
-        "Include the provided source URLs as citations."
-    ),
-    (
-        "human",
-        "Research Query: {query}\n\n"
-        "Analyzer Output:\n{analysis}\n\n"
-        "Source Material:\n{combined}\n\n"
-        "Return the required WriterOutPut structured output."
-    )
-  ])
-  structured_llm=llm.with_structured_output(WriterOutPut)
-  chain=prompt|structured_llm
+    state["report"] = result.model_dump()
 
-  combined = "\n\n".join(
-    f"Source: {s.get('url', '')}\n"
-    f"Title: {s.get('title', '')}\n"
-    f"Content: {s.get('content', s.get('snippet', ''))}"
-    for s in sources
-)
+    state["events"].append({
+        "node": "writer",
+        "status": "success",
+        "revision": state["revision_count"]
+    })
 
-result = chain.invoke({
-    "query": state["query"],
-    "analysis": (
-        f"Findings:\n{findings}\n\n"
-        f"Themes:\n{themes}\n\n"
-        f"Insights:\n{insights}\n\n"
-        f"Critic Feedback:\n{feedback}"
-    ),
-    "combined": combined or "No source material available"
-})
-
-state["report"]=result.model_dump()
-state["events"].append({
-      "node": "writer",
-      "status": "success",
-      "revision": state["revision_count"]
-  })
-return state
+    return state
 
 # ----- notebook cell 12 -----
 class CriticOutPut(BaseModel):
