@@ -556,36 +556,21 @@ def analyzer_node(state:ResearchState)->ResearchState:
 
 # ----- notebook cell 11 -----
 # ----- notebook cell 11: WRITER -----
-
-class Reference(BaseModel):
-    title: str = Field(
-        description="Title of the cited source"
-    )
-
-    url: str = Field(
-        description="URL of the cited source"
-    )
-
-    relevance: str = Field(
-        description="Short explanation of how this source supports the report"
-    )
-
-
 class WriterOutPut(BaseModel):
     draft: str = Field(
-        description="Final research report, concise and below 600 words"
+        description="Concise final research report, maximum 400 words"
     )
 
     citation: list[str] = Field(
-        description="URLs used as citations. Only use URLs supplied in the source material."
-    )
-
-    reference: list[Reference] = Field(
-        description="Reference details for the cited sources"
+        description="Only URLs supplied in the source material"
     )
 
 
 def writer_node(state: ResearchState) -> ResearchState:
+
+    # -----------------------------
+    # Get Analyzer output
+    # -----------------------------
 
     analysis = state.get("analysis") or {}
 
@@ -595,17 +580,24 @@ def writer_node(state: ResearchState) -> ResearchState:
 
     sources = state.get("sources") or []
 
+    # -----------------------------
+    # Guardrails
+    # -----------------------------
+
     if not findings and not themes and not insights:
         raise ValueError(
             "Writer received no findings/themes/insights "
-            "from Analyzer. Nothing to write."
+            "from Analyzer."
         )
 
     if not sources:
         raise ValueError(
-            "Writer received an empty sources list. "
-            "Cannot generate citations."
+            "Writer received no sources."
         )
+
+    # -----------------------------
+    # Revision feedback
+    # -----------------------------
 
     revision_count = state.get("revision_count", 0)
 
@@ -616,14 +608,17 @@ def writer_node(state: ResearchState) -> ResearchState:
     if revision_count > 0:
         feedback = critic_feedback.get("feedback", "")
 
-    # Build compact source material
+    # -----------------------------
+    # Compact source material
+    # -----------------------------
+
     source_blocks = []
 
     for i, source in enumerate(sources[:6], start=1):
 
-        url = source.get("url", "")
         title = source.get("title", "")
-        snippet = str(source.get("snippet", ""))[:2500]
+        url = source.get("url", "")
+        snippet = str(source.get("snippet", ""))[:2000]
 
         source_blocks.append(
             f"""
@@ -636,7 +631,10 @@ Content: {snippet}
 
     combined_sources = "\n".join(source_blocks)
 
+    # -----------------------------
     # Writer prompt
+    # -----------------------------
+
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -648,45 +646,41 @@ Analyzer Output and supplied Source Material.
 
 STRICT RULES:
 
-1. Do NOT use outside knowledge.
-2. Do NOT invent facts, dates, statistics, events,
-   provisions, people, organizations, or claims.
-3. Keep the draft BELOW 600 words.
-4. Use a clear title and short sections.
-5. Include a concise conclusion.
-6. Important factual claims must be supported by
-   the supplied sources.
-7. citation must contain ONLY URLs supplied in
-   Source Material.
-8. Do NOT invent URLs.
-9. Each reference must contain:
-   - title
-   - url
-   - relevance
-10. Every reference URL must also appear in citation.
-11. Do NOT use [1], [2], 【1】, etc. inside the draft.
-12. Keep URLs in citation/reference fields.
-13. If a claim is not supported by the sources,
+1. Use ONLY the provided information.
+2. Do NOT use outside knowledge.
+3. Do NOT invent facts, dates, statistics,
+   events, people, organizations, or claims.
+4. Keep the draft BELOW 400 words.
+5. Use a clear title.
+6. Use short sections.
+7. Include a concise conclusion.
+8. Stay directly focused on the user's research query.
+9. citation must contain ONLY URLs that appear
+   in the supplied Source Material.
+10. Do NOT invent URLs.
+11. Do NOT put URLs inside the draft.
+12. Do NOT use [1], [2], [3], 【1】 or similar
+    citation markers inside the draft.
+13. If information is not supported by the sources,
     do not include it.
 14. Apply Critic Feedback when provided.
-15. Return ONLY the WriterOutPut
+15. Return ONLY the WriterOutPut structured output.
 """
         ),
+
         (
             "human",
             """
 Research Query:
 {query}
 
-Analyzer Output:
-
-Findings:
+Analyzer Findings:
 {findings}
 
-Themes:
+Analyzer Themes:
 {themes}
 
-Insights:
+Analyzer Insights:
 {insights}
 
 Source Material:
@@ -703,12 +697,20 @@ Generate the final WriterOutPut.
         )
     ])
 
+    # -----------------------------
+    # Structured output
+    # -----------------------------
+
     structured_llm = llm.with_structured_output(
         WriterOutPut,
         method="function_calling"
     )
 
     chain = prompt | structured_llm
+
+    # -----------------------------
+    # Invoke Writer
+    # -----------------------------
 
     result = chain.invoke({
         "query": state["query"],
@@ -724,7 +726,10 @@ Generate the final WriterOutPut.
         "revision": revision_count
     })
 
+    # -----------------------------
     # Validate citations
+    # -----------------------------
+
     valid_urls = {
         source.get("url", "").strip()
         for source in sources
@@ -732,51 +737,66 @@ Generate the final WriterOutPut.
     }
 
     invalid_citations = [
-        url for url in result.citation
+        url
+        for url in result.citation
         if url not in valid_urls
     ]
 
     if invalid_citations:
         raise ValueError(
-            "Writer generated citations that were not present "
-            f"in supplied sources: {invalid_citations}"
+            "Writer generated citations that were not "
+            f"present in supplied sources: {invalid_citations}"
         )
 
-    # Validate references
-    for ref in result.reference:
-
-        if ref.url not in valid_urls:
-            raise ValueError(
-                f"Writer generated an invalid reference URL: {ref.url}"
-            )
-
+    # -----------------------------
     # Store report
+    # -----------------------------
+
     state["report"] = result.model_dump()
 
+    # -----------------------------
     # Update CitationStore
+    # -----------------------------
+
     citation_store = state.setdefault(
         "citation_store",
         {}
     )
 
-    for ref in result.reference:
+    for url in result.citation:
+
+        source_info = next(
+            (
+                s for s in sources
+                if s.get("url") == url
+            ),
+            {}
+        )
 
         upsert_citation(
             citation_store,
-            title=ref.title,
-            url=ref.url,
+            title=source_info.get(
+                "title",
+                "Writer citation"
+            ),
+            url=url,
             source="writer",
-            snippet=ref.relevance,
+            snippet=source_info.get(
+                "snippet",
+                ""
+            )[:200],
             used_in="writer"
         )
 
+    # -----------------------------
     # Event logging
+    # -----------------------------
+
     state["events"].append({
         "node": "writer",
         "status": "success",
         "revision": revision_count,
-        "citation_count": len(result.citation),
-        "reference_count": len(result.reference)
+        "citation_count": len(result.citation)
     })
 
     return state
