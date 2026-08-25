@@ -217,7 +217,7 @@ if _tavily_key_clean != TAVILY_API_KEY:
     TAVILY_API_KEY = _tavily_key_clean
     os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 
-Tavily=TavilySearch(max_results=5,api_key=TAVILY_API_KEY)
+Tavily=TavilySearch(max_results=5)
 
 def retriever_node(state:ResearchState)->ResearchState:
   subtopics=state["plan"]["subtopics"]
