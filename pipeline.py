@@ -224,15 +224,24 @@ def retriever_node(state:ResearchState)->ResearchState:
     try:
       raw=Tavily.invoke({"query":topic})
     except Exception as e:
-      logger.error(f"[retriever] Tavily call failed for subtopic '{topic}': {type(e).__name__}: {e}")
-      state["errors"].append({"node": "retriever", "subtopic": topic, "error": f"{type(e).__name__}: {e}"})
+      err_detail=f"{type(e).__name__}: {e}"
+      logger.error(f"[retriever] Tavily call failed for subtopic '{topic}': {err_detail}")
+      state["errors"].append({"node": "retriever", "subtopic": topic, "error": err_detail})
+      state["events"].append({"node": "retriever", "status": "subtopic_error",
+                               "detail": f"subtopic='{topic}' raised {err_detail}"})
       continue
 
     raw_result=raw.get("results",[]) if isinstance(raw,dict) else raw
     logger.info(f"[retriever] subtopic='{topic}' -> {len(raw_result)} raw results")
 
     if not raw_result:
+      raw_preview = str(raw)[:300]
       logger.warning(f"[retriever] Tavily returned ZERO results for subtopic '{topic}'. Raw response: {raw}")
+      state["events"].append({"node": "retriever", "status": "subtopic_empty",
+                               "detail": f"subtopic='{topic}' -> 0 results. raw={raw_preview}"})
+    else:
+      state["events"].append({"node": "retriever", "status": "subtopic_ok",
+                               "detail": f"subtopic='{topic}' -> {len(raw_result)} results"})
 
     for r in raw_result:
       item={
