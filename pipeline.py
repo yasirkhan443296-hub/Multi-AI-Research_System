@@ -186,10 +186,10 @@ def evaluate_run(output: dict) -> dict:
 
 # ----- notebook cell 7 -----
 class plannerOutPut(BaseModel):
-    plan_id: str = Field description="Short unique ID for this research plan")
+    plan_id: str = Field(description="Short unique ID for this research plan")
     subtopics:str=Field(min_length=2,
                     max_length=3,
-                    description="2 focused research subtopics
+                    description="2 focused research subtopics)
     strategy: str = Field(description="Brief research strategy" )
 
 def planner_node(state:ResearchState)->ResearchState:
