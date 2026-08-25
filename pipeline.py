@@ -516,7 +516,7 @@ def analyzer_node(state:ResearchState)->ResearchState:
   )
   if substantive_chars < 40:
     raise ValueError(
-        f"Analyzer received {len(state['reader_outputs'])} reader_outputs but they contain "
+        f"Analyzer received {len(state.get('reader_outputs',[]))} reader_outputs but they contain "
         f"almost no usable text (only {substantive_chars} chars of summary/key_points combined). "
         "The Reader LLM likely returned empty fields — check scraped page text quality "
         "and reader_node's structured output."
