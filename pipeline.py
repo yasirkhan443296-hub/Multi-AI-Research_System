@@ -53,8 +53,9 @@ TAVILY_API_KEY=os.getenv("TAVILY_API_KEY")
 
 # ----- notebook cell 5 -----
 llm=ChatGroq(
-   model="llama-3.3-70b-versatile",
-   temperature=0
+   model="openai/gpt-oss-20b",
+   temperature=0,
+   max_completion_tokens=1026
 )
 response=llm.invoke("Hello, are you working?")
 print(response.content)
