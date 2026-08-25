@@ -609,14 +609,23 @@ def writer_node(state:ResearchState)->ResearchState:
   structured_llm=llm.with_structured_output(WriterOutPut)
   chain=prompt|structured_llm
 
-  result=chain.invoke({
-      "query": state["query"],
-      "findings": findings,
-      "themes": themes,
-      "insights": insights,
-      "sources": sources,
-      "feedback": feedback
-  })
+  combined = "\n\n".join(
+    f"Source: {s.get('url', '')}\n"
+    f"Title: {s.get('title', '')}\n"
+    f"Content: {s.get('content', s.get('snippet', ''))}"
+    for s in sources
+)
+
+result = chain.invoke({
+    "query": state["query"],
+    "analysis": (
+        f"Findings:\n{findings}\n\n"
+        f"Themes:\n{themes}\n\n"
+        f"Insights:\n{insights}\n\n"
+        f"Critic Feedback:\n{feedback}"
+    ),
+    "combined": combined or "No source material available"
+})
 
   state["report"]=result.model_dump()
   state["events"].append({
