@@ -437,7 +437,7 @@ def reader_node(state: ResearchState) -> ResearchState:
         )
     ])
 
-    structured_llm = llm.with_structured_output(ReaderOutPut)
+    structured_llm = llm.with_structured_output(ReaderOutPut,method="function_calling")
     chain = prompt | structured_llm
 
     citation_store = state.setdefault("citation_store", {})
