@@ -218,67 +218,172 @@ if _tavily_key_clean != TAVILY_API_KEY:
     TAVILY_API_KEY = _tavily_key_clean
     os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 
-Tavily=TavilySearch(max_results=5)
+Tavily=TavilySearch(max_results=2)
 
-def retriever_node(state:ResearchState)->ResearchState:
-  subtopics=state["plan"]["subtopics"]
-  all_results=[]
-  all_sources=[]
-  citation_store=state.setdefault("citation_store",{})
+def retriever_node(state: ResearchState) -> ResearchState:
+    subtopics = state["plan"]["subtopics"]
 
-  # One-time masked diagnostic so the actual resolved key is visible in the
-  # app's event log (not just console logs you may not have access to).
-  _key = TAVILY_API_KEY or ""
-  if len(_key) > 12:
-    _mask = f"{_key[:7]}...{_key[-4:]} (len={len(_key)}, starts_with_tvly={_key.startswith('tvly-')})"
-  else:
-    _mask = f"SUSPICIOUSLY SHORT OR EMPTY: '{_key}' (len={len(_key)})"
-  state["events"].append({"node": "retriever", "status": "key_diagnostic", "detail": _mask})
+    all_results = []
+    all_sources = []
+    citation_store = state.setdefault("citation_store", {})
 
-  for topic in subtopics:
-    try:
-      raw=Tavily.invoke({"query":topic})
-    except Exception as e:
-      err_detail=f"{type(e).__name__}: {e}"
-      logger.error(f"[retriever] Tavily call failed for subtopic '{topic}': {err_detail}")
-      state["errors"].append({"node": "retriever", "subtopic": topic, "error": err_detail})
-      state["events"].append({"node": "retriever", "status": "subtopic_error",
-                               "detail": f"subtopic='{topic}' raised {err_detail}"})
-      continue
+    # Maximum time allowed for collecting sources
+    MAX_SEARCH_TIME = 10
+    start_time = time.time()
 
-    raw_result=raw.get("results",[]) if isinstance(raw,dict) else raw
-    logger.info(f"[retriever] subtopic='{topic}' -> {len(raw_result)} raw results")
+    # One-time masked diagnostic
+    _key = TAVILY_API_KEY or ""
 
-    if not raw_result:
-      raw_preview = str(raw)[:300]
-      logger.warning(f"[retriever] Tavily returned ZERO results for subtopic '{topic}'. Raw response: {raw}")
-      state["events"].append({"node": "retriever", "status": "subtopic_empty",
-                               "detail": f"subtopic='{topic}' -> 0 results. raw={raw_preview}"})
+    if len(_key) > 12:
+        _mask = (
+            f"{_key[:7]}...{_key[-4:]} "
+            f"(len={len(_key)}, starts_with_tvly={_key.startswith('tvly-')})"
+        )
     else:
-      state["events"].append({"node": "retriever", "status": "subtopic_ok",
-                               "detail": f"subtopic='{topic}' -> {len(raw_result)} results"})
+        _mask = (
+            f"SUSPICIOUSLY SHORT OR EMPTY: "
+            f"'{_key}' (len={len(_key)})"
+        )
 
-    for r in raw_result:
-      item={
-          "title": r.get("title", ""),
-          "url": r.get("url", ""),
-          "snippet": r.get("content", r.get("snippet", ""))
-      }
-      all_results.append(item)
-      all_sources.append({"title":item["title"],"url":item["url"]})
-      upsert_citation(citation_store, title=item["title"], url=item["url"],
-                       source="web_search", snippet=item["snippet"], used_in="retriever")
+    state["events"].append({
+        "node": "retriever",
+        "status": "key_diagnostic",
+        "detail": _mask
+    })
 
-  if not all_sources:
-    raise ValueError(
-        "Retriever found no sources for any subtopic — check TAVILY_API_KEY "
-        "in Streamlit secrets, Tavily quota/rate limits, or try a less narrow query."
-    )
+    for topic in subtopics:
 
-  state["search_results"]=all_results
-  state["sources"]=all_sources
-  state["events"].append({"node":"retriever","status":"success"})
-  return state
+        # Stop starting new searches after 10 seconds
+        if time.time() - start_time >= MAX_SEARCH_TIME:
+            state["events"].append({
+                "node": "retriever",
+                "status": "time_limit",
+                "detail": "10-second search window reached"
+            })
+            break
+
+        try:
+            raw = Tavily.invoke({
+                "query": topic
+            })
+
+        except Exception as e:
+            err_detail = f"{type(e).__name__}: {e}"
+
+            logger.error(
+                f"[retriever] Tavily call failed "
+                f"for subtopic '{topic}': {err_detail}"
+            )
+
+            state["errors"].append({
+                "node": "retriever",
+                "subtopic": topic,
+                "error": err_detail
+            })
+
+            state["events"].append({
+                "node": "retriever",
+                "status": "subtopic_error",
+                "detail": (
+                    f"subtopic='{topic}' raised {err_detail}"
+                )
+            })
+
+            continue
+
+        raw_result = (
+            raw.get("results", [])
+            if isinstance(raw, dict)
+            else raw
+        )
+
+        logger.info(
+            f"[retriever] subtopic='{topic}' "
+            f"-> {len(raw_result)} raw results"
+        )
+
+        if not raw_result:
+            raw_preview = str(raw)[:300]
+
+            logger.warning(
+                f"[retriever] Tavily returned ZERO results "
+                f"for subtopic '{topic}'. Raw response: {raw}"
+            )
+
+            state["events"].append({
+                "node": "retriever",
+                "status": "subtopic_empty",
+                "detail": (
+                    f"subtopic='{topic}' -> 0 results. "
+                    f"raw={raw_preview}"
+                )
+            })
+
+        else:
+            state["events"].append({
+                "node": "retriever",
+                "status": "subtopic_ok",
+                "detail": (
+                    f"subtopic='{topic}' -> "
+                    f"{len(raw_result)} results"
+                )
+            })
+
+        for r in raw_result:
+
+            item = {
+                "title": r.get("title", ""),
+                "url": r.get("url", ""),
+                "snippet": r.get(
+                    "content",
+                    r.get("snippet", "")
+                )
+            }
+
+            # Ignore results without a URL
+            if not item["url"]:
+                continue
+
+            all_results.append(item)
+
+            all_sources.append({
+                "title": item["title"],
+                "url": item["url"]
+            })
+
+            upsert_citation(
+                citation_store,
+                title=item["title"],
+                url=item["url"],
+                source="web_search",
+                snippet=item["snippet"],
+                used_in="retriever"
+            )
+
+    # Calculate actual search time
+    elapsed = round(time.time() - start_time, 2)
+
+    # Fail only if absolutely no sources were collected
+    if not all_sources:
+        raise ValueError(
+            "Retriever found no sources. "
+            "Check TAVILY_API_KEY, Tavily quota/rate limits, "
+            "or try a less narrow query."
+        )
+
+    state["search_results"] = all_results
+    state["sources"] = all_sources
+
+    state["events"].append({
+        "node": "retriever",
+        "status": "success",
+        "detail": (
+            f"Collected {len(all_sources)} sources "
+            f"in {elapsed} seconds"
+        )
+    })
+
+    return state
 
 # ----- notebook cell 9 -----
 class ReaderOutPut(BaseModel):
