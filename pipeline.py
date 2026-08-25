@@ -578,4 +578,40 @@ class Orchestrator:
         out_ok, out_reason = validate_output(result.get("critic_feedback"))
         if not out_ok:
             log_event(result, "orchestrator", "error", f"output guardrail: {out_reason}")
-            return {"ok": 
+            return {"ok": False, "error": f"Guardrail: {out_reason}",
+                    "errors": result.get("errors", []), "events": result.get("events", [])}
+
+        log_event(result,"orchestrator", "success",
+                   f"revisions_used={result['revision_count']}")
+
+        return {
+            "ok": True,
+            "final_report": result.get("final_report"),
+            "revision_count": result.get("revision_count"),
+            "errors": result.get("errors", []),
+            "events": result.get("events", []),
+        }
+       except Exception as e:
+           log_event(state, "orchestrator", "error", str(e))
+           return {
+                "ok": False,
+                "error": str(e),
+                "errors": state.get("errors", []),
+                "events": state.get("events", []),
+         }
+
+# ----- notebook cell 17 (guarded) -----
+if __name__ == '__main__':
+    orchestrator = Orchestrator(app, max_revisions=2)
+    output = orchestrator.run("Impact of artificial intelligence on education")
+    
+    if output["ok"]:
+        print(output["final_report"]["report"])
+        print("Revisions used:", output["revision_count"])
+    else:
+        print("Pipeline failed:", output["error"])
+    
+    print("\n--- EVENTS ---")
+    for ev in output["events"]:
+        print(ev)
+    
