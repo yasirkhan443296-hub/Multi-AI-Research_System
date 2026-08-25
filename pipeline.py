@@ -527,22 +527,19 @@ def analyzer_node(state:ResearchState)->ResearchState:
   prompt=ChatPromptTemplate.from_messages([
       (
         "system",
-        "You synthesize research findings across multiple sources. "
-        "Identify common themes, key findings, and insights. "
-        "Every finding must be traceable to a source below — cite the URL.\n\n"
-        "Return concise analysis only.\n"
-        "- Maximum 5 findings.\n"
-        "- Maximum 3 insights.\n"
-        "- Each finding must be no more than 30 words.\n"
-        "- Each insight must be no more than 30 words.\n"
-        "- Keep citations concise.\n"
-        "- Do not repeat information.\n"
-        "- Do not add information that is not supported by the Reader output.\n"
-        "- Do not write the final report."
+        "You are the Analyzer Agent. "
+        "Analyze the research findings provided below. "
+        "Identify important findings and useful insights. "
+        "Use only information from the provided sources. "
+        "Do not add outside facts or speculation. "
+        "Keep the analysis concise."
     ),
     (
         "human",
-        "Query: {query}\n\nSource material:\n{combined}"
+        "Research Query: {query}\n\n"
+        "Source Material:\n{combined}\n\n"
+        "Reader Output:\n{reader_output}\n\n"
+        "Return the required AnalayerOutPut structured output."
     )
   ])
   structured_llm=llm.with_structured_output(AnalayerOutPut)
