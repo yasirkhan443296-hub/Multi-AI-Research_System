@@ -186,17 +186,30 @@ def evaluate_run(output: dict) -> dict:
 
 # ----- notebook cell 7 -----
 class plannerOutPut(BaseModel):
-  plan_id:str=Field(description="short unique id for this plan")
-  subtopics:list[str]=Field(description="2 subtopics to research")
-  strategy:str=Field(description="brief search strategy")
+    plan_id: str = Field description="Short unique ID for this research plan")
+    subtopics:str=Field(min_length=2,
+                    max_length=3,
+                    description="2 focused research subtopics
+    strategy: str = Field(description="Brief research strategy" )
 
 def planner_node(state:ResearchState)->ResearchState:
     prompt=ChatPromptTemplate.from_messages([
-        ("system",
- "You break a research query into ONLY 2 focused subtopics. "
- "Keep them directly relevant to the user's query.")
+        (
+            "system",
+            "You are a research planner.\n"
+            "You MUST return the answer using the provided structured output schema.\n"
+            "Do NOT answer conversationally.\n"
+            "Do NOT ask the user for another query.\n"
+            "Create exactly 2 focused research subtopics from the query.\n"
+            "Return only the structured PlannerOutPut."
+        ),
+        (
+            "human",
+            "Research query: {query}\n"
+            "Break this query into 2 or 3 focused subtopics."
+        )
     ])
-    Structured_llm=llm.with_structured_output(plannerOutPut)
+    Structured_llm=llm.with_structured_output(plannerOutPut,method="function_calling")
     chain=prompt|Structured_llm
     result=chain.invoke({"query":state["query"]})
 
