@@ -545,11 +545,11 @@ def analyzer_node(state:ResearchState)->ResearchState:
   structured_llm=llm.with_structured_output(AnalayerOutPut)
   chain=prompt|structured_llm
 
-  result=chain.invoke({
-      "query": state["query"],
-        "combined": combined or "no sources available"
-  })
-
+  result = chain.invoke({
+    "query": state["query"],
+    "combined": combined or "no sources available",
+    "reader_output": combined or "no reader output available"
+})
   state["analysis"]=result.model_dump()
   state["events"].append({"node": "analyzer", "status": "success"})
   return state
