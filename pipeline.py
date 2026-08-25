@@ -48,14 +48,30 @@ def upsert_citation(citation_store, *, title, url, source, snippet="", used_in=N
 
 # ----- notebook cell 4 -----
 load_dotenv()
-GROQ_API_KEY=os.getenv("GROQ_API_KEY")
-TAVILY_API_KEY=os.getenv("TAVILY_API_KEY")
+
+def get_secret(key: str) -> str | None:
+    """Check real env vars / .env first (local dev), then fall back to
+    Streamlit Cloud's st.secrets (which does NOT auto-populate os.environ)."""
+    val = os.getenv(key)
+    if val:
+        return val
+    try:
+        return st.secrets.get(key)
+    except Exception:
+        return None
+
+GROQ_API_KEY=get_secret("GROQ_API_KEY")
+TAVILY_API_KEY=get_secret("TAVILY_API_KEY")
+
+if not GROQ_API_KEY:
+    raise RuntimeError("GROQ_API_KEY not found in environment or st.secrets.")
+if not TAVILY_API_KEY:
+    raise RuntimeError("TAVILY_API_KEY not found in environment or st.secrets.")
 
 # ----- notebook cell 5 -----
 llm=ChatGroq(
-   model="openai/gpt-oss-20b",
-   temperature=0,
-   max_completion_tokens=1026
+   model="openai/gpt-oss-120b",
+   temperature=0
 )
 response=llm.invoke("Hello, are you working?")
 print(response.content)
@@ -199,8 +215,18 @@ def retriever_node(state:ResearchState)->ResearchState:
   citation_store=state.setdefault("citation_store",{})
 
   for topic in subtopics:
-    raw=Tavily.invoke({"query":topic})
+    try:
+      raw=Tavily.invoke({"query":topic})
+    except Exception as e:
+      logger.error(f"[retriever] Tavily call failed for subtopic '{topic}': {type(e).__name__}: {e}")
+      state["errors"].append({"node": "retriever", "subtopic": topic, "error": f"{type(e).__name__}: {e}"})
+      continue
+
     raw_result=raw.get("results",[]) if isinstance(raw,dict) else raw
+    logger.info(f"[retriever] subtopic='{topic}' -> {len(raw_result)} raw results")
+
+    if not raw_result:
+      logger.warning(f"[retriever] Tavily returned ZERO results for subtopic '{topic}'. Raw response: {raw}")
 
     for r in raw_result:
       item={
