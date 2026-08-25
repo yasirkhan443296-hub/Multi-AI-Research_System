@@ -306,12 +306,40 @@ def reader_node(state:ResearchState)->ResearchState:
 
   citation_store=state.setdefault("citation_store",{})
   reader_outputs=[]
-  for src in state["sources"]:
+  MAX_READER_CHARS = 8000
+
+for src in state["sources"]:
     try:
-      text=scrape_url(src["url"])
+        text = scrape_url(src["url"])
+
+        # Prevent oversized requests to the LLM
+        if len(text) > MAX_READER_CHARS:
+            text = text[:MAX_READER_CHARS]
+
     except Exception as e:
-        state["errors"].append({"node": "reader", "url": src["url"], "error": str(e)})
+        state["errors"].append({
+            "node": "reader",
+            "url": src["url"],
+            "error": str(e)
+        })
         continue
+
+    result = chain.invoke({
+        "url": src["url"],
+        "title": src["title"],
+        "text": text
+    })
+
+    reader_outputs.append(result.model_dump())
+
+    upsert_citation(
+        citation_store,
+        title=result.title or src["title"],
+        url=result.url or src["url"],
+        source="web",
+        snippet=result.summary[:200],
+        used_in="reader"
+    )
 
     result=chain.invoke({
         "url": src["url"],
