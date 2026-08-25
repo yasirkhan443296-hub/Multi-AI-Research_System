@@ -525,22 +525,25 @@ def analyzer_node(state:ResearchState)->ResearchState:
   logger.info(f"[analyzer] combined context length: {len(combined)} chars from {len(state['reader_outputs'])} sources")
 
   prompt=ChatPromptTemplate.from_messages([
-      ("system",
-         "You synthesize research findings across multiple sources. "
-         "Identify common themes, key findings, and insights. "
-         "Every finding must be traceable to a source below — cite the URL."),
-        ("human", "Query: {query}\n\nSource material:\n{combined}")
-
-      """Return concise analysis only.
-
-      - Maximum 5 findings.
-      - Maximum 3 insights.
-      - Each finding must be no more than 30 words.
-      - Each insight must be no more than 30 words.
-      - Keep citations concise.
-      - Do not repeat the same information.
-      - Do not add information that is not supported by the Reader output.
-      - Do not write the final report. """
+      (
+        "system",
+        "You synthesize research findings across multiple sources. "
+        "Identify common themes, key findings, and insights. "
+        "Every finding must be traceable to a source below — cite the URL.\n\n"
+        "Return concise analysis only.\n"
+        "- Maximum 5 findings.\n"
+        "- Maximum 3 insights.\n"
+        "- Each finding must be no more than 30 words.\n"
+        "- Each insight must be no more than 30 words.\n"
+        "- Keep citations concise.\n"
+        "- Do not repeat information.\n"
+        "- Do not add information that is not supported by the Reader output.\n"
+        "- Do not write the final report."
+    ),
+    (
+        "human",
+        "Query: {query}\n\nSource material:\n{combined}"
+    )
   ])
   structured_llm=llm.with_structured_output(AnalayerOutPut)
   chain=prompt|structured_llm
