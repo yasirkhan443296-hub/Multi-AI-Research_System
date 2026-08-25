@@ -1,4 +1,4 @@
-# pipeline.py -- generated from the bug-fixed research_system.ipynb
+pipeline.py -- generated from the bug-fixed research_system.ipynb
 # Same logic as the notebook. Only mechanical changes for import-safety:
 #  - no !pip install lines
 #  - cell 15 (with_retry/log_event) moved before cell 14 (graph build),
@@ -232,7 +232,7 @@ if _tavily_key_clean != TAVILY_API_KEY:
     TAVILY_API_KEY = _tavily_key_clean
     os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 
-Tavily=TavilySearch(max_results=2)
+Tavily=TavilySearch(max_results=2, api_key=TAVILY_API_KEY)
 
 def retriever_node(state: ResearchState) -> ResearchState:
     subtopics = state["plan"]["subtopics"]
@@ -446,23 +446,25 @@ def reader_node(state: ResearchState) -> ResearchState:
     MAX_READER_CHARS = 8000
 
     for src in state["sources"]:
-    try:
-        text = scrape_url(src["url"])
-    except Exception as e:
-        state["errors"].append({"node": "reader", "url": src["url"], "error": str(e)})
-        continue
+        try:
+            text = scrape_url(src["url"])
+        except Exception as e:
+            state["errors"].append({"node": "reader", "url": src["url"], "error": str(e)})
+            continue
 
-    text = text.strip() if text else ""
-    if len(text) < 50:
-        state["errors"].append({"node": "reader", "url": src["url"], "error": f"scraped text too short ({len(text)} chars) — skipped"})
-        continue
+        text = text.strip() if text else ""
+        if len(text) < 50:
+            state["errors"].append({"node": "reader", "url": src["url"], "error": f"scraped text too short ({len(text)} chars) — skipped"})
+            continue
 
-    result = chain.invoke({
-        "url": src["url"],
-        "title": src["title"],
-        "text": text
-    })
+        if len(text) > MAX_READER_CHARS:
+            text = text[:MAX_READER_CHARS]
 
+        result = chain.invoke({
+            "url": src["url"],
+            "title": src["title"],
+            "text": text
+        })
 
         reader_outputs.append(result.model_dump())
 
