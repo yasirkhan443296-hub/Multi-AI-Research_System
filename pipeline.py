@@ -54,8 +54,8 @@ TAVILY_API_KEY=os.getenv("TAVILY_API_KEY")
 GEMINI_API_KEY=os.getenv("GEMINI_API_KEY")
 
 # ----- notebook cell 5 -----
-llm=ChatGoogleGenerativeAI(
-   model="gemini-3-flash",
+llm=ChatGroq(
+   model="llama-3.1-8b-instant",
    temperature=0,
    api_key=GEMINI_API_KEY,
     max_output_tokens=1024
