@@ -291,6 +291,23 @@ def analyzer_node(state:ResearchState)->ResearchState:
         f"Source: {r['url']}\nTitle: {r['title']}\nSummary: {r['summary']}\nKey points: {r['key_points']}"
         for r in state["reader_outputs"]
     )
+
+  # Guard against reader_outputs that exist but carry no real content
+  # (e.g. every summary/key_points came back blank from the Reader LLM).
+  substantive_chars = sum(
+      len((r.get("summary") or "")) + len("".join(r.get("key_points") or []))
+      for r in state["reader_outputs"]
+  )
+  if substantive_chars < 40:
+    raise ValueError(
+        f"Analyzer received {len(state['reader_outputs'])} reader_outputs but they contain "
+        f"almost no usable text (only {substantive_chars} chars of summary/key_points combined). "
+        "The Reader LLM likely returned empty fields — check scraped page text quality "
+        "and reader_node's structured output."
+    )
+
+  logger.info(f"[analyzer] combined context length: {len(combined)} chars from {len(state['reader_outputs'])} sources")
+
   prompt=ChatPromptTemplate.from_messages([
       ("system",
          "You synthesize research findings across multiple sources. "
@@ -317,6 +334,23 @@ class WriterOutPut(BaseModel):
   reference: list[dict]
 
 def writer_node(state:ResearchState)->ResearchState:
+  analysis = state.get("analysis") or {}
+  findings = analysis.get("findings") or []
+  themes = analysis.get("themes") or []
+  insights = analysis.get("insights") or []
+  sources = state.get("sources") or []
+
+  if not findings and not themes and not insights:
+    raise ValueError(
+        "Writer received no findings/themes/insights from the analyzer — "
+        "nothing to write or cite. Check analyzer_node output."
+    )
+  if not sources:
+    raise ValueError(
+        "Writer received an empty sources list — cannot cite by URL. "
+        "Check retriever_node output."
+    )
+
   is_revision=state["revision_count"]>0
   feedback=state["critic_feedback"]["feedback"] if is_revision and state["critic_feedback"] else ""
 
@@ -340,10 +374,10 @@ def writer_node(state:ResearchState)->ResearchState:
 
   result=chain.invoke({
       "query": state["query"],
-      "findings": state["analysis"]["findings"],
-      "themes": state["analysis"]["themes"],
-      "insights": state["analysis"]["insights"],
-      "sources": state["sources"],
+      "findings": findings,
+      "themes": themes,
+      "insights": insights,
+      "sources": sources,
       "feedback": feedback
   })
 
@@ -544,40 +578,4 @@ class Orchestrator:
         out_ok, out_reason = validate_output(result.get("critic_feedback"))
         if not out_ok:
             log_event(result, "orchestrator", "error", f"output guardrail: {out_reason}")
-            return {"ok": False, "error": f"Guardrail: {out_reason}",
-                    "errors": result.get("errors", []), "events": result.get("events", [])}
-
-        log_event(result,"orchestrator", "success",
-                   f"revisions_used={result['revision_count']}")
-
-        return {
-            "ok": True,
-            "final_report": result.get("final_report"),
-            "revision_count": result.get("revision_count"),
-            "errors": result.get("errors", []),
-            "events": result.get("events", []),
-        }
-       except Exception as e:
-           log_event(state, "orchestrator", "error", str(e))
-           return {
-                "ok": False,
-                "error": str(e),
-                "errors": state.get("errors", []),
-                "events": state.get("events", []),
-         }
-
-# ----- notebook cell 17 (guarded) -----
-if __name__ == '__main__':
-    orchestrator = Orchestrator(app, max_revisions=2)
-    output = orchestrator.run("Impact of artificial intelligence on education")
-    
-    if output["ok"]:
-        print(output["final_report"]["report"])
-        print("Revisions used:", output["revision_count"])
-    else:
-        print("Pipeline failed:", output["error"])
-    
-    print("\n--- EVENTS ---")
-    for ev in output["events"]:
-        print(ev)
-    
+            return {"ok": 
