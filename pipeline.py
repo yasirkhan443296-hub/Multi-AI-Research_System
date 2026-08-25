@@ -357,9 +357,9 @@ if not reader_outputs:
         "issue). Cannot proceed to analysis with zero content."
     )
 
-  state["reader_outputs"]=reader_outputs
-  state["events"].append({"node": "reader", "status": "success", "count": len(reader_outputs)})
-  return state
+state["reader_outputs"]=reader_outputs
+state["events"].append({"node": "reader", "status": "success", "count": len(reader_outputs)})
+return state
 
 # ----- notebook cell 10 -----
 class AnalayerOutPut(BaseModel):
