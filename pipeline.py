@@ -592,12 +592,31 @@ def writer_node(state:ResearchState)->ResearchState:
     system+=" This is a REVISION — directly address the critic feedback provided."
 
   prompt=ChatPromptTemplate.from_messages([
-      ("system", system),
-      ("human",
-       "Query: {query}\n\n"
-       "Findings: {findings}\nThemes: {themes}\nInsights: {insights}\n\n"
-       "Available sources:\n{sources}\n\n"
-       "Critic feedback (empty if first draft):\n{feedback}")
+       (
+        "system",
+        "You are the Writer Agent in a multi-agent research system. "
+        "Create a concise, factual research report from the Analyzer output. "
+        "Use ONLY information supported by the provided research material.\n\n"
+
+        "Writing requirements:\n"
+        "- Maximum 700 words.\n"
+        "- Use a clear title.\n"
+        "- Use short sections with headings.\n"
+        "- Keep paragraphs concise.\n"
+        "- Do not repeat findings.\n"
+        "- Do not introduce new facts or outside knowledge.\n"
+        "- Do not speculate beyond what the sources support.\n"
+        "- Include citations using the provided source URLs.\n"
+        "- Make every important factual claim traceable to a source.\n"
+        "- Do not include unnecessary background information.\n"
+        "- Return ONLY the structured output requested by the schema."
+    ),
+    (
+        "human",
+        "Research Query:\n{query}\n\n"
+        "Analyzer Findings:\n{analysis}\n\n"
+        "Source Material:\n{combined}"
+    )
   ])
   structured_llm=llm.with_structured_output(WriterOutPut)
   chain=prompt|structured_llm
