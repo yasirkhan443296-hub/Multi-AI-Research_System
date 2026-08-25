@@ -78,7 +78,7 @@ os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 llm=ChatGroq(
    model="openai/gpt-oss-120b",
    temperature=0,
-   max_completion_tokens=1000
+   max_completion_tokens=800
 )
 response=llm.invoke("Hello, are you working?")
 print(response.content)
