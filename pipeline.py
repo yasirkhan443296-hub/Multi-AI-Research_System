@@ -421,6 +421,15 @@ def reader_node(state: ResearchState) -> ResearchState:
             "system",
             "You read scraped page text and extract key points and a short summary. "
             "Do not invent facts not in the text."
+            """Return only information directly supported by the provided sources.
+
+            - Generate a maximum of 5 key points.
+            - Each key point must be concise.
+            - Each key point should be no more than 25 words.
+            - Keep the summary below 80 words.
+            - Do not add outside knowledge.
+            - Do not speculate.
+            - Do not repeat information. """
         ),
         (
             "human",
