@@ -627,13 +627,13 @@ result = chain.invoke({
     "combined": combined or "No source material available"
 })
 
-  state["report"]=result.model_dump()
-  state["events"].append({
+state["report"]=result.model_dump()
+state["events"].append({
       "node": "writer",
       "status": "success",
       "revision": state["revision_count"]
   })
-  return state
+return state
 
 # ----- notebook cell 12 -----
 class CriticOutPut(BaseModel):
