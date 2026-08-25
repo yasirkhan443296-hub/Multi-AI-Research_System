@@ -68,6 +68,12 @@ if not GROQ_API_KEY:
 if not TAVILY_API_KEY:
     raise RuntimeError("TAVILY_API_KEY not found in environment or st.secrets.")
 
+# Tavily's underlying wrapper reads TAVILY_API_KEY from the real environment
+# rather than reliably honoring an api_key= kwarg — write it back explicitly
+# so this works the same locally (.env) and on Streamlit Cloud (st.secrets).
+os.environ["GROQ_API_KEY"] = GROQ_API_KEY
+os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
+
 # ----- notebook cell 5 -----
 llm=ChatGroq(
    model="openai/gpt-oss-120b",
