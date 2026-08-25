@@ -383,20 +383,22 @@ class PublisherOutPut(BaseModel):
   citation:list[str]
   metadata:dict
 
+publisher_llm = llm.bind(max_tokens=600)
 def publisher_node(state:ResearchState)->ResearchState:
   prompt=ChatPromptTemplate.from_messages([
       ("system",
-         "You format an approved research draft into a clean final report "
-         "with a title, clear sections, and a references list. "
-         "Do not change facts or add new claims — formatting only."),
+         "You format an approved research draft into a SHORT final report. "
+         "Hard limit: under 350 words total. Title + 3 short sections + a "
+         "references list (title and url only, no extra commentary). "
+         "Do not change facts or add new claims — formatting and trimming only."),
         ("human", "Draft:\n{draft}\n\nSources:\n{sources}")
   ])
 
-  structured_llm=llm.with_structured_output(PublisherOutPut)
+  structured_llm=publisher_llm.with_structured_output(PublisherOutPut)
   chain=prompt|structured_llm
 
   result=chain.invoke({
-      "draft": state["report"]["draft"],
+      "draft": state["report"]["draft"][:2500],
         "sources": state["sources"]
   })
 
