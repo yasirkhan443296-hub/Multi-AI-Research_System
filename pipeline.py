@@ -187,13 +187,14 @@ def evaluate_run(output: dict) -> dict:
 # ----- notebook cell 7 -----
 class plannerOutPut(BaseModel):
   plan_id:str=Field(description="short unique id for this plan")
-  subtopics:list[str]=Field(description="3-5 subtopics to research")
+  subtopics:list[str]=Field(description="2 subtopics to research")
   strategy:str=Field(description="brief search strategy")
 
 def planner_node(state:ResearchState)->ResearchState:
     prompt=ChatPromptTemplate.from_messages([
-        ("system", "You break a research query into a clear plan with 3-5 subtopics."),
-        ("human", "Query: {query}")
+        ("system",
+ "You break a research query into ONLY 2 focused subtopics. "
+ "Keep them directly relevant to the user's query.")
     ])
     Structured_llm=llm.with_structured_output(plannerOutPut)
     chain=prompt|Structured_llm
@@ -422,7 +423,7 @@ def reader_node(state: ResearchState) -> ResearchState:
 
     MAX_READER_CHARS = 8000
 
-    for src in state["sources"]:
+    for src in state["sources"][:3]:
         try:
             text = scrape_url(src["url"])
 
@@ -667,7 +668,7 @@ def log_event(state:ResearchState,node:str,status:str,detail:str=""):
   else:
     logger.info(f"[{node},{status},{detail}]")
 
-def with_retry(node_name, max_attempts=3, backoff=1.5):
+def with_retry(node_name, max_attempts=1, backoff=1.5):
     def decorator(fn):
         def wrapper(state: ResearchState) -> ResearchState:
             attempt = 0
