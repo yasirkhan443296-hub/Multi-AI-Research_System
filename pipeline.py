@@ -296,55 +296,62 @@ def scrape_url(url:str)->str:
     raise ValueError(f"No extractable text at {url}")
   return text
 
-def reader_node(state:ResearchState)->ResearchState:
-  prompt=ChatPromptTemplate.from_messages([
-      ("system", "You read scraped page text and extract key points and a short summary. Do not invent facts not in the text."),
-      ("human", "URL: {url}\nTitle: {title}\n\nText:\n{text}")
-  ])
-  structured_llm=llm.with_structured_output(ReaderOutPut)
-  chain=prompt|structured_llm
+def reader_node(state: ResearchState) -> ResearchState:
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "You read scraped page text and extract key points and a short summary. "
+            "Do not invent facts not in the text."
+        ),
+        (
+            "human",
+            "URL: {url}\nTitle: {title}\n\nText:\n{text}"
+        )
+    ])
 
-  citation_store=state.setdefault("citation_store",{})
-  reader_outputs=[]
-  MAX_READER_CHARS = 8000
+    structured_llm = llm.with_structured_output(ReaderOutPut)
+    chain = prompt | structured_llm
 
-for src in state["sources"]:
-    try:
-        text = scrape_url(src["url"])
+    citation_store = state.setdefault("citation_store", {})
+    reader_outputs = []
 
-        # Prevent oversized requests to the LLM
-        if len(text) > MAX_READER_CHARS:
-            text = text[:MAX_READER_CHARS]
+    MAX_READER_CHARS = 8000
 
-    except Exception as e:
-        state["errors"].append({
-            "node": "reader",
+    for src in state["sources"]:
+        try:
+            text = scrape_url(src["url"])
+
+            if len(text) > MAX_READER_CHARS:
+                text = text[:MAX_READER_CHARS]
+
+        except Exception as e:
+            state["errors"].append({
+                "node": "reader",
+                "url": src["url"],
+                "error": str(e)
+            })
+            continue
+
+        result = chain.invoke({
             "url": src["url"],
-            "error": str(e)
-        })
-        continue
-
-   result = chain.invoke({
-   "url": src["url"],
-   "title": src["title"],
-   "text": text
+            "title": src["title"],
+            "text": text
         })
 
-   reader_outputs.append(result.model_dump())
+        reader_outputs.append(result.model_dump())
 
-   upsert_citation(
-   citation_store,
-   title=result.title or src["title"],
-   url=result.url or src["url"],
-   source="web",
-   snippet=result.summary[:200],
-   used_in="reader"
+        upsert_citation(
+            citation_store,
+            title=result.title or src["title"],
+            url=result.url or src["url"],
+            source="web",
+            snippet=result.summary[:200],
+            used_in="reader"
         )
 
     if not reader_outputs:
         raise ValueError(
-            "Reader extracted no usable content from any source — "
-            "all URLs likely failed to scrape or returned unusable content."
+            "Reader extracted no usable content from any source."
         )
 
     state["reader_outputs"] = reader_outputs
