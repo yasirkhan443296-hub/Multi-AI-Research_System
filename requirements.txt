@@ -11,3 +11,4 @@ streamlit
 requests
 beautifulsoup4
 trafilatura
+langchain-google-genai
