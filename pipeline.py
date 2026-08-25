@@ -212,6 +212,11 @@ class RetrieverOutPut(BaseModel):
    subtopic:str
    results:list[SearchResultItem]
 
+_tavily_key_clean = (TAVILY_API_KEY or "").strip()
+if _tavily_key_clean != TAVILY_API_KEY:
+    TAVILY_API_KEY = _tavily_key_clean
+    os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
+
 Tavily=TavilySearch(max_results=5,api_key=TAVILY_API_KEY)
 
 def retriever_node(state:ResearchState)->ResearchState:
@@ -219,6 +224,15 @@ def retriever_node(state:ResearchState)->ResearchState:
   all_results=[]
   all_sources=[]
   citation_store=state.setdefault("citation_store",{})
+
+  # One-time masked diagnostic so the actual resolved key is visible in the
+  # app's event log (not just console logs you may not have access to).
+  _key = TAVILY_API_KEY or ""
+  if len(_key) > 12:
+    _mask = f"{_key[:7]}...{_key[-4:]} (len={len(_key)}, starts_with_tvly={_key.startswith('tvly-')})"
+  else:
+    _mask = f"SUSPICIOUSLY SHORT OR EMPTY: '{_key}' (len={len(_key)})"
+  state["events"].append({"node": "retriever", "status": "key_diagnostic", "detail": _mask})
 
   for topic in subtopics:
     try:
