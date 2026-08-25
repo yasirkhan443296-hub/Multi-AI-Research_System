@@ -24,6 +24,7 @@ import os
 import time
 from datetime import datetime
 from langgraph.graph import StateGraph,START,END
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 def now_iso():
     return datetime.utcnow().isoformat() + "Z"
@@ -50,12 +51,14 @@ def upsert_citation(citation_store, *, title, url, source, snippet="", used_in=N
 load_dotenv()
 GROQ_API_KEY=os.getenv("GROQ_API_KEY")
 TAVILY_API_KEY=os.getenv("TAVILY_API_KEY")
+GEMINI_API_KEY=os.getenv("GEMINI_API_KEY")
 
 # ----- notebook cell 5 -----
-llm=ChatGroq(
-   model="llama-3.3-70b-versatile",
+llm=ChatGoogleGenerativeAI(
+   model="gemini-2.5-flash-lite",
    temperature=0,
-   api_key=GROQ_API_KEY
+   api_key=GEMINI_API_KEY,
+    max_output_tokens=1024
 )
 response=llm.invoke("Hello, are you working?")
 print(response.content)
