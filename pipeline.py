@@ -594,28 +594,19 @@ def writer_node(state:ResearchState)->ResearchState:
   prompt=ChatPromptTemplate.from_messages([
        (
         "system",
-        "You are the Writer Agent in a multi-agent research system. "
-        "Create a concise, factual research report from the Analyzer output. "
-        "Use ONLY information supported by the provided research material.\n\n"
-
-        "Writing requirements:\n"
-        "- Maximum 700 words.\n"
-        "- Use a clear title.\n"
-        "- Use short sections with headings.\n"
-        "- Keep paragraphs concise.\n"
-        "- Do not repeat findings.\n"
-        "- Do not introduce new facts or outside knowledge.\n"
-        "- Do not speculate beyond what the sources support.\n"
-        "- Include citations using the provided source URLs.\n"
-        "- Make every important factual claim traceable to a source.\n"
-        "- Do not include unnecessary background information.\n"
-        "- Return ONLY the structured output requested by the schema."
+        "You are the Writer Agent. "
+        "Write a concise research report using only the information provided. "
+        "Do not add outside facts or speculation. "
+        "Keep the report under 700 words. "
+        "Use a title and short sections. "
+        "Include the provided source URLs as citations."
     ),
     (
         "human",
-        "Research Query:\n{query}\n\n"
-        "Analyzer Findings:\n{analysis}\n\n"
-        "Source Material:\n{combined}"
+        "Research Query: {query}\n\n"
+        "Analyzer Output:\n{analysis}\n\n"
+        "Source Material:\n{combined}\n\n"
+        "Return the required WriterOutPut structured output."
     )
   ])
   structured_llm=llm.with_structured_output(WriterOutPut)
