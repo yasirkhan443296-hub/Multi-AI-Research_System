@@ -55,7 +55,7 @@ GEMINI_API_KEY=os.getenv("GEMINI_API_KEY")
 
 # ----- notebook cell 5 -----
 llm=ChatGroq(
-   model="llama-3.1-8b-instant",
+   model="openai/gpt-oss-20b",
    temperature=0,
    api_key=GEMINI_API_KEY,
    max_completion_tokens=1024
