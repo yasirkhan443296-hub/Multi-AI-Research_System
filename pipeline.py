@@ -58,7 +58,7 @@ llm=ChatGroq(
    model="llama-3.1-8b-instant",
    temperature=0,
    api_key=GEMINI_API_KEY,
-    max_output_tokens=1024
+   max_completion_tokens=1024
 )
 response=llm.invoke("Hello, are you working?")
 print(response.content)
