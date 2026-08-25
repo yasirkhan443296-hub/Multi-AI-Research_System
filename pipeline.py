@@ -555,86 +555,122 @@ def analyzer_node(state:ResearchState)->ResearchState:
   return state
 
 # ----- notebook cell 11 -----
+# ----- notebook cell 11: WRITER -----
+
+class Reference(BaseModel):
+    title: str = Field(
+        description="Title of the cited source"
+    )
+
+    url: str = Field(
+        description="URL of the cited source"
+    )
+
+    relevance: str = Field(
+        description="Short explanation of how this source supports the report"
+    )
+
+
 class WriterOutPut(BaseModel):
-  draft:str
-  citation:list[str]
-  reference: list[dict]
+    draft: str = Field(
+        description="Final research report, concise and below 600 words"
+    )
+
+    citation: list[str] = Field(
+        description="URLs used as citations. Only use URLs supplied in the source material."
+    )
+
+    reference: list[Reference] = Field(
+        description="Reference details for the cited sources"
+    )
+
+
 def writer_node(state: ResearchState) -> ResearchState:
+
     analysis = state.get("analysis") or {}
+
     findings = analysis.get("findings") or []
     themes = analysis.get("themes") or []
     insights = analysis.get("insights") or []
+
     sources = state.get("sources") or []
 
     if not findings and not themes and not insights:
         raise ValueError(
-            "Writer received no findings/themes/insights from the analyzer — "
-            "nothing to write or cite. Check analyzer_node output."
+            "Writer received no findings/themes/insights "
+            "from Analyzer. Nothing to write."
         )
 
     if not sources:
         raise ValueError(
-            "Writer received an empty sources list — cannot cite by URL. "
-            "Check retriever_node output."
+            "Writer received an empty sources list. "
+            "Cannot generate citations."
         )
 
-    is_revision = state["revision_count"] > 0
+    revision_count = state.get("revision_count", 0)
 
-    feedback = (
-        state["critic_feedback"]["feedback"]
-        if is_revision and state["critic_feedback"]
-        else ""
-    )
+    critic_feedback = state.get("critic_feedback") or {}
 
+    feedback = ""
+
+    if revision_count > 0:
+        feedback = critic_feedback.get("feedback", "")
+
+    # Build compact source material
+    source_blocks = []
+
+    for i, source in enumerate(sources[:6], start=1):
+
+        url = source.get("url", "")
+        title = source.get("title", "")
+        snippet = str(source.get("snippet", ""))[:2500]
+
+        source_blocks.append(
+            f"""
+SOURCE {i}
+Title: {title}
+URL: {url}
+Content: {snippet}
+"""
+        )
+
+    combined_sources = "\n".join(source_blocks)
+
+    # Writer prompt
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
-            "You are the Writer Agent. "
-            "Write a concise research report using only the information provided. "
-            "Do not add outside facts or speculation. "
-            "Keep the report under 700 words. "
-            "Use a title and short sections. "
-            "Include the provided source URLs as citations."
-        ),
-        (
-            "human",
-            "Research Query: {query}\n\n"
-            "Analyzer Output:\n{analysis}\n\n"
-            "Source Material:\n{combined}\n\n"
-            "Return the required WriterOutPut structured output."
-        )
-    ])
+            """
+You are the Writer Agent in a multi-agent research system.
 
-    combined = "\n\n".join(
-        f"Source: {s.get('url', '')}\n"
-        f"Title: {s.get('title', '')}\n"
-        f"Content: {s.get('content', s.get('snippet', ''))}"
-        for s in sources
-    )
+Create the final research report using ONLY the
+Analyzer Output and supplied Source Material.
 
-    structured_llm = llm.with_structured_output(WriterOutPut)
-    chain = prompt | structured_llm
+STRICT RULES:
 
-    result = chain.invoke({
-        "query": state["query"],
-        "analysis": (
-            f"Findings:\n{findings}\n\n"
-            f"Themes:\n{themes}\n\n"
-            f"Insights:\n{insights}\n\n"
-            f"Critic Feedback:\n{feedback}"
-        ),
-        "combined": combined or "No source material available"
-    })
+1. Do NOT use outside knowledge.
+2. Do NOT invent facts, dates, statistics, events,
+   provisions, people, organizations, or claims.
+3. Keep the draft BELOW 600 words.
+4. Use a clear title and short sections.
+5. Include a concise conclusion.
+6. Important factual claims must be supported by
+   the supplied sources.
+7. citation must contain ONLY URLs supplied in
+   Source Material.
+8. Do NOT invent URLs.
+9. Each reference must contain:
+   - title
+   - url
+   - relevance
+10. Every reference URL must also appear in citation.
+11. Do NOT use [1], [2], 【1】, etc. inside the draft.
+12. Keep URLs in citation/reference fields.
+13. If a claim is not supported by the sources,
+    do not include it.
+14. Apply Critic Feedback when provided.
+15. Return ONLY the WriterOutPut
 
-    state["report"] = result.model_dump()
-
-    state["events"].append({
-        "node": "writer",
-        "status": "success",
-        "revision": state["revision_count"]
-    })
-
-    return state
 
 # ----- notebook cell 12 -----
 class CriticOutPut(BaseModel):
