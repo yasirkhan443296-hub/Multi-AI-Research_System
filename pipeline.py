@@ -324,21 +324,21 @@ for src in state["sources"]:
         })
         continue
 
-            result = chain.invoke({
-            "url": src["url"],
-            "title": src["title"],
-            "text": text
+   result = chain.invoke({
+   "url": src["url"],
+   "title": src["title"],
+   "text": text
         })
 
-        reader_outputs.append(result.model_dump())
+   reader_outputs.append(result.model_dump())
 
-        upsert_citation(
-            citation_store,
-            title=result.title or src["title"],
-            url=result.url or src["url"],
-            source="web",
-            snippet=result.summary[:200],
-            used_in="reader"
+   upsert_citation(
+   citation_store,
+   title=result.title or src["title"],
+   url=result.url or src["url"],
+   source="web",
+   snippet=result.summary[:200],
+   used_in="reader"
         )
 
     if not reader_outputs:
