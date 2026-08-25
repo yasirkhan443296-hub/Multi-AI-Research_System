@@ -350,8 +350,8 @@ for src in state["sources"]:
     upsert_citation(citation_store, title=result.title or src["title"], url=result.url or src["url"],
                      source="web", snippet=result.summary[:200], used_in="reader")
 
-  if not reader_outputs:
-    raise ValueError(
+if not reader_outputs:
+  raise ValueError(
         "Reader extracted no usable content from any source — all URLs likely "
         "failed to scrape (blocked by robots.txt, paywalled, or a network/egress "
         "issue). Cannot proceed to analysis with zero content."
