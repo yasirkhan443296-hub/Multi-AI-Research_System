@@ -670,7 +670,116 @@ STRICT RULES:
     do not include it.
 14. Apply Critic Feedback when provided.
 15. Return ONLY the WriterOutPut
+"""
+        ),
+        (
+            "human",
+            """
+Research Query:
+{query}
 
+Analyzer Output:
+
+Findings:
+{findings}
+
+Themes:
+{themes}
+
+Insights:
+{insights}
+
+Source Material:
+{sources}
+
+Critic Feedback:
+{feedback}
+
+Revision Number:
+{revision}
+
+Generate the final WriterOutPut.
+"""
+        )
+    ])
+
+    structured_llm = llm.with_structured_output(
+        WriterOutPut,
+        method="function_calling"
+    )
+
+    chain = prompt | structured_llm
+
+    result = chain.invoke({
+        "query": state["query"],
+        "findings": findings,
+        "themes": themes,
+        "insights": insights,
+        "sources": combined_sources,
+        "feedback": (
+            feedback
+            if feedback
+            else "No critic feedback. This is the initial draft."
+        ),
+        "revision": revision_count
+    })
+
+    # Validate citations
+    valid_urls = {
+        source.get("url", "").strip()
+        for source in sources
+        if source.get("url")
+    }
+
+    invalid_citations = [
+        url for url in result.citation
+        if url not in valid_urls
+    ]
+
+    if invalid_citations:
+        raise ValueError(
+            "Writer generated citations that were not present "
+            f"in supplied sources: {invalid_citations}"
+        )
+
+    # Validate references
+    for ref in result.reference:
+
+        if ref.url not in valid_urls:
+            raise ValueError(
+                f"Writer generated an invalid reference URL: {ref.url}"
+            )
+
+    # Store report
+    state["report"] = result.model_dump()
+
+    # Update CitationStore
+    citation_store = state.setdefault(
+        "citation_store",
+        {}
+    )
+
+    for ref in result.reference:
+
+        upsert_citation(
+            citation_store,
+            title=ref.title,
+            url=ref.url,
+            source="writer",
+            snippet=ref.relevance,
+            used_in="writer"
+        )
+
+    # Event logging
+    state["events"].append({
+        "node": "writer",
+        "status": "success",
+        "revision": revision_count,
+        "citation_count": len(result.citation),
+        "reference_count": len(result.reference)
+    })
+
+    return state
 
 # ----- notebook cell 12 -----
 class CriticOutPut(BaseModel):
