@@ -22,11 +22,43 @@ from langchain_core.messages import BaseMessage
 import logging
 import os
 import time
-from datetime import datetime
+import ipaddress
+from urllib.parse import urlparse
+from datetime import datetime, timezone
 from langgraph.graph import StateGraph,START,END
 
+# Logger must exist before any node/helper that might log — moved to the
+# very top instead of living down near the graph-build cell (bug #5).
+logging.basicConfig(level=logging.INFO,format="%(asctime)s | %(levelname)s | %(message)s")
+logger=logging.getLogger("Research_Pipline")
+
 def now_iso():
-    return datetime.utcnow().isoformat() + "Z"
+    # datetime.utcnow() is deprecated since Python 3.12 (bug #6).
+    return datetime.now(timezone.utc).isoformat()
+
+def is_safe_url(url: str) -> bool:
+    """Basic SSRF guard (bug #18): only allow http(s) URLs that don't
+    resolve to loopback/private/link-local addresses. Not exhaustive
+    (doesn't cover DNS rebinding), but blocks the obvious cases before
+    we hand an arbitrary URL to trafilatura.fetch_url."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        host = parsed.hostname
+        if not host:
+            return False
+        if host in ("localhost",):
+            return False
+        try:
+            ip = ipaddress.ip_address(host)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False
+        except ValueError:
+            pass  # host is a domain name, not a literal IP — fine
+        return True
+    except Exception:
+        return False
 
 def upsert_citation(citation_store, *, title, url, source, snippet="", used_in=None):
     """Shared, deduped-by-URL citation & source-metadata store.
@@ -75,10 +107,13 @@ os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 
 # ----- notebook cell 5 -----
+# max_tokens bumped 1024 -> 2048 (bug #8): the writer/publisher structured
+# calls (draft + citations + reference list + metadata) were tight against
+# the old ceiling and risked silent truncation on longer drafts.
 llm=ChatGroq(
    model="openai/gpt-oss-120b",
    temperature=0,
-   max_tokens=1024
+   max_tokens=2048
 )
 response=llm.invoke("Hello, are you working?")
 print(response.content)
@@ -99,6 +134,7 @@ class ResearchState(TypedDict):
   errors:list
   events:list
   plan:dict|None
+  searched_subtopics:list  # bug #14 — tracks subtopics already searched so retries don't re-burn Tavily quota
 
 initial_state: ResearchState = {
     "query": "Impact of artificial intelligence on education",
@@ -114,7 +150,8 @@ initial_state: ResearchState = {
     "max_revisions": 2,
     "errors": [],
     "events": [],
-    "plan": None
+    "plan": None,
+    "searched_subtopics": []
 }
 
 print(initial_state)
@@ -124,6 +161,15 @@ print(initial_state)
 # ============================================================
 
 BANNED_TERMS = ["bomb", "weapon synthesis", "malware", "exploit code"]
+# Word-boundary regex instead of plain substring match (bugs #9 / #19) —
+# "bomb" as a bare `in` check would false-positive on "bombastic",
+# "carpet bombing history", etc. This still isn't a robust safety filter
+# (it's easy to evade with spacing/synonyms) but it removes the most
+# obvious over-blocking false positives.
+import re as _re
+_BANNED_TERM_PATTERNS = [
+    _re.compile(r"\b" + _re.escape(term) + r"\b") for term in BANNED_TERMS
+]
 
 def validate_query(query: str) -> tuple[bool, str]:
     q = query.strip()
@@ -132,8 +178,8 @@ def validate_query(query: str) -> tuple[bool, str]:
     if len(q) > 500:
         return False, "Query too long — keep it under 500 characters."
     lowered = q.lower()
-    for term in BANNED_TERMS:
-        if term in lowered:
+    for term, pattern in zip(BANNED_TERMS, _BANNED_TERM_PATTERNS):
+        if pattern.search(lowered):
             return False, f"Query blocked — appears to request unsafe content ('{term}')."
     return True, ""
 
@@ -152,13 +198,18 @@ def validate_reader_outputs(reader_outputs: list) -> tuple[bool, str]:
         return False, "Reader extracted nothing from any source — cannot analyze."
     return True, ""
 
-def validate_output(critic_feedback: dict) -> tuple[bool, str]:
+def validate_output(critic_feedback: dict, final_report: dict | None = None) -> tuple[bool, str]:
     if not critic_feedback:
         return False, "No critic evaluation available — cannot verify report."
     if critic_feedback.get("hallucination_risk") == "high":
         return False, "Blocked: Critic flagged high hallucination risk."
-    if critic_feedback.get("citation_check") == "missing":
-        return False, "Blocked: Critic flagged missing citations."
+    if critic_feedback.get("citation_check") == "poor":
+        return False, "Blocked: Critic flagged poor citation quality."
+    # Bug #2: this guardrail previously never checked that a final_report
+    # was actually produced — a publisher failure that somehow slipped
+    # past its own retry could have returned "ok" with nothing to show.
+    if not final_report or not final_report.get("report"):
+        return False, "Publisher produced no final report — cannot verify output."
     return True, ""
 
 
@@ -168,14 +219,24 @@ def validate_output(critic_feedback: dict) -> tuple[bool, str]:
 
 def evaluate_run(output: dict) -> dict:
     final = output.get("final_report") or {}
-    store_urls = {s.get("url") for s in final.get("all_sources", [])}
+    # Bug #20: the old denominator was every URL the *retriever* ever
+    # found (`all_sources`), including ones the reader never processed
+    # (capped at MAX_READER_SOURCES) and so could never have been cited —
+    # that artificially deflates coverage. The real denominator is the
+    # set of sources that actually reached the writer, i.e. anything the
+    # reader processed (used_in contains "reader").
+    all_sources = final.get("all_sources", [])
+    citable_urls = {
+        s.get("url") for s in all_sources
+        if "reader" in (s.get("used_in") or [])
+    }
     cited_urls = {r.get("url") for r in final.get("reference", []) if isinstance(r, dict)}
-    coverage = len(cited_urls & store_urls) / len(store_urls) if store_urls else 0
+    coverage = len(cited_urls & citable_urls) / len(citable_urls) if citable_urls else 0
 
     scores = [e.get("score") for e in output.get("events", []) if e.get("node") == "critic" and "score" in e]
 
     return {
-        "sources_gathered": len(store_urls),
+        "sources_gathered": len(citable_urls),
         "sources_cited": len(cited_urls),
         "citation_coverage": round(coverage, 2),
         "revision_count": output.get("revision_count", 0),
@@ -213,8 +274,17 @@ def planner_node(state:ResearchState)->ResearchState:
     chain=prompt|Structured_llm
     result=chain.invoke({"query":state["query"]})
 
-    state["events"].append({"node":"planner","status":"success"})
     state["plan"]=result.model_dump()
+
+    # Bug #4: guardrail moved here (fails fast at the node that produced
+    # the bad data) instead of only being checked after the whole graph
+    # finishes, which wastes retriever/reader/analyzer/writer/critic calls
+    # on a run that was already doomed.
+    plan_ok, plan_reason = validate_plan(state["plan"])
+    if not plan_ok:
+        raise ValueError(f"Guardrail: {plan_reason}")
+
+    state["events"].append({"node":"planner","status":"success"})
     return state
 
 # ----- notebook cell 8 -----
@@ -237,8 +307,14 @@ Tavily=TavilySearch(max_results=2, api_key=TAVILY_API_KEY)
 def retriever_node(state: ResearchState) -> ResearchState:
     subtopics = state["plan"]["subtopics"]
 
-    all_results = []
-    all_sources = []
+    # Bug #14: if with_retry has to re-run this node (e.g. one subtopic's
+    # Tavily call raised), previously the whole node re-queried every
+    # subtopic from scratch, burning Tavily quota on searches that already
+    # succeeded. Now we carry forward what was already collected and skip
+    # subtopics we've already searched successfully.
+    all_results = list(state.get("search_results") or [])
+    all_sources = list(state.get("sources") or [])
+    searched_subtopics = set(state.get("searched_subtopics") or [])
     citation_store = state.setdefault("citation_store", {})
 
     # Maximum time allowed for collecting sources
@@ -275,6 +351,14 @@ def retriever_node(state: ResearchState) -> ResearchState:
                 "detail": "10-second search window reached"
             })
             break
+
+        if topic in searched_subtopics:
+            state["events"].append({
+                "node": "retriever",
+                "status": "subtopic_skip_cached",
+                "detail": f"subtopic='{topic}' already searched in a prior attempt — reusing cached results instead of re-querying Tavily"
+            })
+            continue
 
         try:
             raw = Tavily.invoke({
@@ -376,6 +460,12 @@ def retriever_node(state: ResearchState) -> ResearchState:
                 used_in="retriever"
             )
 
+        # Mark this subtopic done (success or legitimately-empty) so a
+        # retry of this node won't re-query it. Left unmarked on exception
+        # (see `continue` in the except block above) so a transient
+        # failure still gets retried for that specific subtopic.
+        searched_subtopics.add(topic)
+
     # Calculate actual search time
     elapsed = round(time.time() - start_time, 2)
 
@@ -389,6 +479,7 @@ def retriever_node(state: ResearchState) -> ResearchState:
 
     state["search_results"] = all_results
     state["sources"] = all_sources
+    state["searched_subtopics"] = list(searched_subtopics)
 
     state["events"].append({
         "node": "retriever",
@@ -408,11 +499,23 @@ class ReaderOutPut(BaseModel):
   key_points:list[str]
   summary:str
 
-def scrape_url(url:str)->str:
-  downloaded=trafilatura.fetch_url(url)
-  if downloaded is None:
-    raise ValueError(f"Could not fetch {url}")
-  text = trafilatura.extract(downloaded)
+SCRAPE_TIMEOUT_SECONDS = 10  # bug #16 — trafilatura.fetch_url() has no
+                             # built-in timeout and can hang indefinitely
+                             # on a slow/unresponsive host.
+
+def scrape_url(url: str) -> str:
+  if not is_safe_url(url):  # bug #18
+    raise ValueError(f"Refusing to fetch unsafe/non-public URL: {url}")
+  try:
+    resp = requests.get(
+        url,
+        timeout=SCRAPE_TIMEOUT_SECONDS,
+        headers={"User-Agent": "Mozilla/5.0 (research-pipeline-bot)"},
+    )
+    resp.raise_for_status()
+  except requests.exceptions.RequestException as e:
+    raise ValueError(f"Could not fetch {url}: {e}")
+  text = trafilatura.extract(resp.text)
   if not text:
     raise ValueError(f"No extractable text at {url}")
   return text
@@ -445,9 +548,19 @@ def reader_node(state: ResearchState) -> ResearchState:
     citation_store = state.setdefault("citation_store", {})
     reader_outputs = []
 
-    MAX_READER_CHARS = 4000
+    # Bug #17: raised from 4000 now that max_tokens headroom (#8) can
+    # actually support a longer per-source excerpt without truncating the
+    # structured output. Still a hard cap by design — full-page text for
+    # every source would blow the context budget across 3+ sources.
+    MAX_READER_CHARS = 8000
 
-    for src in state["sources"][:3]:
+    # Bug #7 (design tradeoff, not a pure bug): capping at 3 sources keeps
+    # latency/cost bounded per run. Named as a constant so it's a
+    # deliberate, easy-to-change knob instead of a silent magic number —
+    # raise it if you want deeper coverage at the cost of more Groq calls.
+    MAX_READER_SOURCES = 3
+
+    for src in state["sources"][:MAX_READER_SOURCES]:
         try:
             text = scrape_url(src["url"])
         except Exception as e:
@@ -547,11 +660,11 @@ def analyzer_node(state:ResearchState)->ResearchState:
   structured_llm=llm.with_structured_output(AnalayerOutPut,method="function_calling")
   chain=prompt|structured_llm
 
-    result = chain.invoke({
+  result = chain.invoke({
     "query": state["query"],
     "combined": combined or "no sources available",
     "reader_output": "Reader outputs are already included in Source Material."
-})
+  })
 
   
   state["analysis"]=result.model_dump()
@@ -618,26 +731,26 @@ def writer_node(state: ResearchState) -> ResearchState:
 
     reader_outputs = state.get("reader_outputs") or []
 
-source_blocks = []
+    source_blocks = []
 
-for i, reader in enumerate(reader_outputs[:3], start=1):
+    for i, reader in enumerate(reader_outputs[:3], start=1):
 
-    url = reader.get("url", "")
-    title = reader.get("title", "")
-    summary = reader.get("summary", "")
-    key_points = reader.get("key_points", [])
+        url = reader.get("url", "")
+        title = reader.get("title", "")
+        summary = reader.get("summary", "")
+        key_points = reader.get("key_points", [])
 
-    source_blocks.append(
-        f"""
+        source_blocks.append(
+            f"""
 SOURCE {i}
 Title: {title}
 URL: {url}
 Summary: {summary}
 Key Points: {key_points}
 """
-    )
+        )
 
-combined_sources = "\n".join(source_blocks)
+    combined_sources = "\n".join(source_blocks)
 
     # -----------------------------
     # Writer prompt
@@ -757,6 +870,42 @@ Generate the final WriterOutPut.
         )
 
     # -----------------------------
+    # Bug #11 (partial mitigation): existence != relevance. A full fix
+    # needs a second LLM pass asking "does source X actually support
+    # claim Y in the draft", which doubles writer-step cost/latency —
+    # a real tradeoff worth deciding deliberately rather than silently
+    # eating the extra Groq calls. As a free heuristic in the meantime,
+    # flag (don't block) citations whose source content shares almost no
+    # vocabulary with the draft — a cheap smell test, not a real semantic
+    # check the critic's hallucination_risk pass (bug #1) is the actual
+    # relevance backstop.
+    # -----------------------------
+    _STOPWORDS = {
+        "the","a","an","of","in","on","and","or","to","for","is","are",
+        "was","were","with","as","by","at","this","that","it","its","be",
+        "from","has","have","had","not","but","which","also"
+    }
+    draft_words = {
+        w.strip(".,;:()\"'").lower()
+        for w in result.draft.split()
+        if len(w) > 3 and w.strip(".,;:()\"'").lower() not in _STOPWORDS
+    }
+    for url in result.citation:
+        source_info = next((s for s in sources if s.get("url") == url), {})
+        source_text = f"{source_info.get('title','')} {source_info.get('snippet','')}"
+        source_words = {
+            w.strip(".,;:()\"'").lower()
+            for w in source_text.split()
+            if len(w) > 3 and w.strip(".,;:()\"'").lower() not in _STOPWORDS
+        }
+        if source_words and not (draft_words & source_words):
+            state["events"].append({
+                "node": "writer",
+                "status": "citation_relevance_warning",
+                "detail": f"'{url}' shares no vocabulary with the draft — possibly cited but not actually used"
+            })
+
+    # -----------------------------
     # Store report
     # -----------------------------
 
@@ -827,17 +976,46 @@ class CriticOutPut(BaseModel):
         description="Maximum 3 specific improvements"
     )
 
-    citation_check: str = Field(
+    # Bug #10: Literal instead of free-form str — this makes the allowed
+    # values part of the schema itself (enforced by structured output),
+    # instead of relying on the prompt text and a downstream string match
+    # that can silently drift out of sync (which is exactly how the old
+    # "missing" vs "poor" mismatch happened).
+    citation_check: Literal["good", "partial", "poor"] = Field(
         description="Citation quality: good, partial, or poor"
+    )
+
+    hallucination_risk: Literal["low", "medium", "high"] = Field(
+        description=(
+            "Risk that the draft contains claims NOT supported by the "
+            "supplied citations/draft content. Must be exactly one of: "
+            "low, medium, high."
+        )
     )
 
 def critic_node(state: ResearchState) -> ResearchState:
 
     draft = state.get("report", {}).get("draft", "")
-    citations = state.get("report", {}).get("citation", [])
+    citation_urls = state.get("report", {}).get("citation", [])
 
     if not draft:
         raise ValueError("Critic received an empty draft.")
+
+    # Bug #1: the critic previously only saw the bare citation URLs, with
+    # no way to check whether the draft's claims are actually supported by
+    # what those sources say. Pull the real content (title/summary/key
+    # points) for each cited URL from citation_store so the critic can do
+    # real fact-checking instead of guessing from a list of links.
+    citation_store = state.get("citation_store", {})
+    citation_blocks = []
+    for url in citation_urls:
+        entry = citation_store.get(url, {})
+        citation_blocks.append(
+            f"URL: {url}\n"
+            f"Title: {entry.get('title', '(unknown)')}\n"
+            f"Content: {entry.get('snippet', '(no content available)')}"
+        )
+    citations = "\n\n".join(citation_blocks) if citation_blocks else "No citations supplied."
 
     prompt = ChatPromptTemplate.from_messages([
         (
@@ -869,6 +1047,14 @@ Rules:
 - Maximum 3 suggestions.
 - Keep feedback concise.
 
+Also assess hallucination_risk — whether the draft contains any claim,
+fact, statistic, date, name, or event that is NOT directly supported by
+the supplied draft/citations:
+- "low": every claim is traceable to the supplied material.
+- "medium": one minor unsupported detail.
+- "high": multiple unsupported claims, or a fabricated citation/fact.
+hallucination_risk must be exactly "low", "medium", or "high".
+
 Return ONLY the CriticOutPut structured output.
 """
         ),
@@ -881,8 +1067,11 @@ Research Query:
 Research Draft:
 {draft}
 
-Citations:
+Cited Sources (title + actual source content for each citation URL):
 {citations}
+
+Check each claim in the draft against the actual source content above —
+not just whether the URL exists.
 
 Now evaluate this research report.
 """
@@ -913,7 +1102,8 @@ Now evaluate this research report.
         "node": "critic",
         "status": "success",
         "score": result.score,
-        "citation_check": result.citation_check
+        "citation_check": result.citation_check,
+        "hallucination_risk": result.hallucination_risk
     })
 
     return state
@@ -928,9 +1118,17 @@ def publisher_node(state:ResearchState)->ResearchState:
   prompt=ChatPromptTemplate.from_messages([
       ("system",
          "You format an approved research draft into a clean final report "
-         "with a title, clear sections, and a references list. "
-         "Do not change facts or add new claims — formatting only."),
-        ("human", "Draft:\n{draft}\n\nSources:\n{sources}")
+         "with a title, clear sections, and a references list.\n\n"
+         "STRICT RULES (bug #12 — publisher must not silently rewrite content):\n"
+         "1. Formatting ONLY. Do not change facts, add new claims, add "
+         "numbers/dates/names not already in the draft, or paraphrase in a "
+         "way that changes meaning.\n"
+         "2. `citation` and every `reference[].url` must come ONLY from the "
+         "Sources list below. Do not invent, guess, or normalize a URL — "
+         "copy it exactly as given.\n"
+         "3. If you are not fully confident about a reference URL, omit it "
+         "rather than guessing."),
+        ("human", "Draft:\n{draft}\n\nSources (the ONLY URLs you may cite or reference):\n{sources}")
   ])
 
   structured_llm=llm.with_structured_output(PublisherOutPut,method="function_calling")
@@ -940,6 +1138,30 @@ def publisher_node(state:ResearchState)->ResearchState:
       "draft": state["report"]["draft"],
         "sources": state["sources"]
   })
+
+  # Bugs #3 / #13: previously nothing checked that the publisher's
+  # citation list / reference URLs actually came from real, known
+  # sources. An LLM can still normalize or slightly mangle a URL despite
+  # instructions, so validate against citation_store (built from every
+  # source the pipeline actually fetched) and fail the node — with_retry
+  # will retry it — rather than silently shipping a fabricated reference.
+  citation_store = state.get("citation_store", {})
+  valid_urls = set(citation_store.keys())
+
+  invalid_citations = [u for u in result.citation if u not in valid_urls]
+  if invalid_citations:
+      raise ValueError(
+          f"Publisher citation URLs not found in citation_store: {invalid_citations}"
+      )
+
+  invalid_refs = [
+      r.get("url") for r in result.reference
+      if isinstance(r, dict) and r.get("url") and r.get("url") not in valid_urls
+  ]
+  if invalid_refs:
+      raise ValueError(
+          f"Publisher reference URLs not found in citation_store: {invalid_refs}"
+      )
 
   final=result.model_dump()
   final["metadata"]={
@@ -955,8 +1177,7 @@ def publisher_node(state:ResearchState)->ResearchState:
   return state
 
 # ----- notebook cell 15 -----
-logging.basicConfig(level=logging.INFO,format="%(asctime)s | %(levelname)s | %(message)s")
-logger=logging.getLogger("Research_Pipline")
+# (logger now defined near the top of the file, before it's ever used — bug #5)
 
 def log_event(state:ResearchState,node:str,status:str,detail:str=""):
   entry={"node":node,"status":status,"detail":detail,"time":time.time()}
@@ -979,8 +1200,13 @@ def with_retry(node_name, max_attempts=1, backoff=1.5):
                     return result
                 except Exception as e:
                     if attempt < max_attempts:
+                        wait = backoff * attempt
+                        if "rate_limit" in str(e) or "429" in str(e):
+                            # TPM windows reset over seconds, not the
+                            # ~20ms Groq suggests — give it real room.
+                            wait = max(wait, 5.0 * attempt)
                         log_event(state, node_name, "retry", str(e))
-                        time.sleep(backoff * attempt)
+                        time.sleep(wait)
                     else:
                         log_event(state, node_name, "error", str(e))
                         state["errors"].append({"node": node_name, "error": str(e)})
@@ -989,14 +1215,15 @@ def with_retry(node_name, max_attempts=1, backoff=1.5):
     return decorator
 
 # ----- notebook cell 14 -----
-graph=StateGraph(ResearchState)
-graph.add_node("planner",with_retry("planner")(planner_node))
-graph.add_node("retriever",with_retry("retriever")(retriever_node))
-graph.add_node("reader",with_retry("reader")(reader_node))
-graph.add_node("analyzer",with_retry("analyzer")(analyzer_node))
-graph.add_node("writer",with_retry("writer")(writer_node))
-graph.add_node("critic",with_retry("critic")(critic_node))
-graph.add_node("publisher",with_retry("publisher")(publisher_node))
+
+ graph=StateGraph(ResearchState)
+graph.add_node("planner",with_retry("planner",max_attempts=3,backoff=2.0)(planner_node))
+graph.add_node("retriever",with_retry("retriever",max_attempts=2,backoff=2.0)(retriever_node))
+graph.add_node("reader",with_retry("reader",max_attempts=3,backoff=2.0)(reader_node))
+graph.add_node("analyzer",with_retry("analyzer",max_attempts=3,backoff=2.0)(analyzer_node))
+graph.add_node("writer",with_retry("writer",max_attempts=3,backoff=2.0)(writer_node))
+graph.add_node("critic",with_retry("critic",max_attempts=3,backoff=2.0)(critic_node))
+graph.add_node("publisher",with_retry("publisher",max_attempts=3,backoff=2.0)(publisher_node))
 
 graph.add_edge(START,"planner")
 graph.add_edge("planner","retriever")
@@ -1005,7 +1232,23 @@ graph.add_edge("reader","analyzer")
 graph.add_edge("analyzer","writer")
 graph.add_edge("writer","critic")
 
+def prepare_revision_node(state: ResearchState) -> ResearchState:
+    """Increments revision_count. Must live in an actual graph node —
+    conditional-edge routing functions cannot persist state mutations
+    in LangGraph, they only decide where to go next."""
+    state["revision_count"] = state.get("revision_count", 0) + 1
+    state["events"].append({
+        "node": "prepare_revision",
+        "status": "success",
+        "revision_count": state["revision_count"]
+    })
+    return state
+
+graph.add_node("prepare_revision", with_retry("prepare_revision")(prepare_revision_node))
+graph.add_edge("prepare_revision", "writer")
+
 def route_after_critic(state: ResearchState) -> str:
+    """Pure routing decision — reads state only, never mutates it."""
 
     critic_feedback = state.get("critic_feedback") or {}
 
@@ -1023,12 +1266,10 @@ def route_after_critic(state: ResearchState) -> str:
         return "publisher"
 
     # Otherwise perform another revision
-    state["revision_count"] = revision_count + 1
-
-    return "writer"
+    return "prepare_revision"
 
 graph.add_conditional_edges("critic",route_after_critic,
-    {"writer": "writer", "publisher": "publisher"})
+    {"prepare_revision": "prepare_revision", "publisher": "publisher"})
 graph.add_edge("publisher",END)
 
 app=graph.compile()
@@ -1055,6 +1296,7 @@ class Orchestrator:
         "max_revisions": self.max_revisions,
         "errors": [],
         "events": [],
+        "searched_subtopics": [],
     }
 
   def run(self,query:str)->dict:
@@ -1070,6 +1312,12 @@ class Orchestrator:
         result=self.app.invoke(state)
 
         # --- mid-pipeline guardrails ---
+        # Bug #4: the primary enforcement now happens inside planner_node /
+        # retriever_node / reader_node themselves (they raise and halt the
+        # graph immediately on bad data — see with_retry's exception
+        # handling). These are kept only as a defense-in-depth safety net
+        # in case a node's return value is ever reshaped without updating
+        # its internal check.
         checks = [
             validate_plan(result.get("plan")),
             validate_sources(result.get("sources")),
@@ -1082,7 +1330,7 @@ class Orchestrator:
                         "errors": result.get("errors", []), "events": result.get("events", [])}
 
         # --- output guardrail ---
-        out_ok, out_reason = validate_output(result.get("critic_feedback"))
+        out_ok, out_reason = validate_output(result.get("critic_feedback"), result.get("final_report"))
         if not out_ok:
             log_event(result, "orchestrator", "error", f"output guardrail: {out_reason}")
             return {"ok": False, "error": f"Guardrail: {out_reason}",
