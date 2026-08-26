@@ -616,11 +616,11 @@ def writer_node(state: ResearchState) -> ResearchState:
 
     source_blocks = []
 
-    for i, source in enumerate(sources[:6], start=1):
+    for i, source in enumerate(sources[:4], start=1):
 
         title = source.get("title", "")
         url = source.get("url", "")
-        snippet = str(source.get("snippet", ""))[:2000]
+        snippet = str(source.get("snippet", ""))[:1200]
 
         source_blocks.append(
             f"""
@@ -652,7 +652,7 @@ STRICT RULES:
 2. Do NOT use outside knowledge.
 3. Do NOT invent facts, dates, statistics,
    events, people, organizations, or claims.
-4. Keep the draft BELOW 400 words.
+4. Keep the draft BELOW 350 words.
 5. Use a clear title.
 6. Use short sections.
 7. Include a concise conclusion.
