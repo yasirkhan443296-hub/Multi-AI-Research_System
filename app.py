@@ -165,7 +165,7 @@ def get_llms():
     return {
         "planner": _llm(100, 0),
         "analyzer": _llm(300, 0.2),
-        "writer": _llm(700, 0.4),
+        "writer": _llm(1200, 0.4),
         "critic": _llm(120, 0),
     }
 
