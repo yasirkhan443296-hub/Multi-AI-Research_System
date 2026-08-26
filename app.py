@@ -543,7 +543,7 @@ h1, h2, h3 { color: #e8e8f0 !important; }
   background: #1b2030; color: #9dd3ff; font-size: 12px; border: 1px solid #2b3350;
 }
 .report-box {
-  background: #12151f; border: 1px solid #262c40; border-radius: 12px;
+  background: #12151f;colour: #111111; border: 1px solid #262c40; border-radius: 12px;
   padding: 22px 24px; margin-top: 10px;
 }
 </style>
