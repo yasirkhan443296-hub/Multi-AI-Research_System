@@ -362,8 +362,10 @@ def retriever_node(state: ResearchState) -> ResearchState:
 
             all_sources.append({
                 "title": item["title"],
-                "url": item["url"]
+                "url": item["url"],
+                 "snippet": item["snippet"]
             })
+            
 
             upsert_citation(
                 citation_store,
@@ -445,7 +447,7 @@ def reader_node(state: ResearchState) -> ResearchState:
 
     MAX_READER_CHARS = 4000
 
-    for src in state["sources"]:
+    for src in state["sources"][:3]:
         try:
             text = scrape_url(src["url"])
         except Exception as e:
@@ -542,7 +544,7 @@ def analyzer_node(state:ResearchState)->ResearchState:
         "Return the required AnalayerOutPut structured output."
     )
   ])
-  structured_llm=llm.with_structured_output(AnalayerOutPut)
+  structured_llm=llm.with_structured_output(AnalayerOutPut,method="function_calling")
   chain=prompt|structured_llm
 
   result = chain.invoke({
@@ -819,7 +821,7 @@ def critic_node(state:ResearchState)->ResearchState:
          "Query: {query}\n\nDraft:\n{draft}\n\nCitations used:\n{citations}")
   ])
 
-  structured_llm=llm.with_structured_output(CriticOutPut)
+  structured_llm=llm.with_structured_output(CriticOutPut,method="function_calling")
   chain=prompt|structured_llm
 
   result=chain.invoke({
@@ -853,7 +855,7 @@ def publisher_node(state:ResearchState)->ResearchState:
         ("human", "Draft:\n{draft}\n\nSources:\n{sources}")
   ])
 
-  structured_llm=llm.with_structured_output(PublisherOutPut)
+  structured_llm=llm.with_structured_output(PublisherOutPut,method="function_calling")
   chain=prompt|structured_llm
 
   result=chain.invoke({
