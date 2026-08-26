@@ -35,6 +35,7 @@ Run
 
 import os
 import re
+import time
 from typing import TypedDict, List, Dict, Optional
 
 import streamlit as st
@@ -63,15 +64,16 @@ except Exception:
 load_dotenv()
 
 # ---------------------------------------------------------------------------
-# CONFIG — tune these to trade off cost vs. depth
+# CONFIG — set as low-cost as possible by default. No revision loop, small
+# max_tokens on every call, minimal content pulled into prompts.
 # ---------------------------------------------------------------------------
-MODEL_NAME = "llama-3.1-8b-instant"   # small + fast + cheap on Groq
+MODEL_NAME = "llama-3.1-8b-instant"   # smallest/cheapest general Groq model
 MAX_SUBTOPICS = 2                     # fewer subtopics -> fewer search calls
 RESULTS_PER_SUBTOPIC = 2
-TOP_SOURCES_TO_READ = 3
-SCRAPE_CHAR_LIMIT = 1200
-SNIPPET_CHAR_LIMIT = 250
-MAX_REVISIONS = 1
+TOP_SOURCES_TO_READ = 2               # fewer pages scraped -> less text to feed the LLM
+SCRAPE_CHAR_LIMIT = 800
+SNIPPET_CHAR_LIMIT = 200
+MAX_REVISIONS = 0                     # 0 = single pass, no Writer/Critic rewrite loop (cheapest)
 PASS_SCORE = 75
 BANNED_TERMS = {"hack", "exploit", "bomb", "weapon", "malware"}
 
@@ -116,6 +118,7 @@ class ResearchState(TypedDict):
     report: str
     critic_score: int
     critic_feedback: str
+    critic_calls: int
     revision_count: int
     final_report: str
     citations: List[str]
@@ -127,7 +130,7 @@ class ResearchState(TypedDict):
 def init_state(topic: str) -> ResearchState:
     return ResearchState(
         topic=topic, plan=[], sources=[], scraped=[], analysis="", report="",
-        critic_score=0, critic_feedback="", revision_count=0, final_report="",
+        critic_score=0, critic_feedback="", critic_calls=0, revision_count=0, final_report="",
         citations=[], output_checks={}, errors=[], events=[],
     )
 
@@ -141,11 +144,49 @@ def _llm(max_tokens: int, temperature: float = 0.2):
 
 def get_llms():
     return {
-        "planner": _llm(180, 0),
-        "analyzer": _llm(350, 0.2),
-        "writer": _llm(700, 0.4),
-        "critic": _llm(180, 0),
+        "planner": _llm(100, 0),
+        "analyzer": _llm(220, 0.2),
+        "writer": _llm(450, 0.4),
+        "critic": _llm(90, 0),
     }
+
+
+# ---------------------------------------------------------------------------
+# Rate-limit-aware invoke — waits and retries on a Groq 429 instead of
+# giving up and degrading that node's output. A 429 is rejected BEFORE Groq
+# processes the request, so retrying costs zero extra tokens, only time.
+# ---------------------------------------------------------------------------
+RATE_LIMIT_MAX_RETRIES = 3
+RATE_LIMIT_BASE_DELAY_SECS = 8   # doubles each retry: 8s, 16s, 32s
+
+
+def is_rate_limit_error(err: Exception) -> bool:
+    text = str(err).lower()
+    return "429" in text or "rate limit" in text or "rate_limit" in text
+
+
+def invoke_with_retry(llm, prompt: str, on_wait=None):
+    """
+    Calls llm.invoke(prompt). On a rate-limit error, waits with exponential
+    backoff and retries (up to RATE_LIMIT_MAX_RETRIES times) instead of
+    immediately failing that node. Any other error is raised right away.
+    `on_wait(seconds, attempt)` is called before each wait, so the UI can
+    show "waiting on rate limit..." instead of looking stuck.
+    """
+    delay = RATE_LIMIT_BASE_DELAY_SECS
+    last_err = None
+    for attempt in range(1, RATE_LIMIT_MAX_RETRIES + 2):  # + 1 initial try
+        try:
+            return llm.invoke(prompt)
+        except Exception as e:
+            if not is_rate_limit_error(e) or attempt > RATE_LIMIT_MAX_RETRIES:
+                raise
+            last_err = e
+            if on_wait:
+                on_wait(delay, attempt)
+            time.sleep(delay)
+            delay *= 2
+    raise last_err
 
 
 def get_tavily():
@@ -182,7 +223,10 @@ def make_planner_node(llms):
             "Reply with ONLY the queries, one per line. No numbering, no extra text."
         )
         try:
-            resp = llms["planner"].invoke(prompt)
+            resp = invoke_with_retry(
+                llms["planner"], prompt,
+                on_wait=lambda secs, n: state["events"].append(f"⏳ Planner: rate limited, retrying in {secs}s (attempt {n})")
+            )
             lines = [l.strip(" -•\t") for l in resp.content.strip().split("\n") if l.strip()]
             state["plan"] = lines[:MAX_SUBTOPICS] or [state["topic"]]
         except Exception as e:
@@ -230,15 +274,18 @@ def make_analyzer_node(llms):
     def analyzer_node(state: ResearchState) -> ResearchState:
         state["events"].append("📊 Analyzer: synthesizing key findings")
         material = "\n\n".join(
-            f"[{i+1}] {s['title']}\n{s['text'][:600]}" for i, s in enumerate(state["scraped"])
-        )[:3000]
+            f"[{i+1}] {s['title']}\n{s['text'][:400]}" for i, s in enumerate(state["scraped"])
+        )[:1600]
         prompt = (
-            "From the material below, list the 3-4 most important, non-redundant "
+            "From the material below, list the 3 most important, non-redundant "
             "findings as short bullet points. Use only facts present in the material.\n\n"
             f"Topic: {state['topic']}\n\nMaterial:\n{material}"
         )
         try:
-            resp = llms["analyzer"].invoke(prompt)
+            resp = invoke_with_retry(
+                llms["analyzer"], prompt,
+                on_wait=lambda secs, n: state["events"].append(f"⏳ Analyzer: rate limited, retrying in {secs}s (attempt {n})")
+            )
             state["analysis"] = resp.content.strip()
         except Exception as e:
             state["errors"].append(f"Analyzer error: {e}")
@@ -249,18 +296,23 @@ def make_analyzer_node(llms):
 
 def make_writer_node(llms):
     def writer_node(state: ResearchState) -> ResearchState:
-        if state.get("critic_feedback"):
+        # revision_count is display-only; the real loop guard is critic_calls
+        # (see should_revise), so this never depends on regex-parsed text.
+        if state["critic_calls"] > 0:
             state["revision_count"] += 1
         state["events"].append(f"✍️ Writer: drafting report (revision {state['revision_count']})")
         revision_note = f"\nAddress this feedback: {state['critic_feedback']}" if state.get("critic_feedback") else ""
         prompt = (
-            f"Write a concise research report (250-400 words) on: {state['topic']}\n\n"
+            f"Write a short research report (150-250 words) on: {state['topic']}\n\n"
             f"Key findings:\n{state['analysis']}{revision_note}\n\n"
             "Use exactly these headers: Introduction, Key Findings, Conclusion, Sources. "
             "Be factual and tight, no filler. Under Sources, list source titles only (one per line)."
         )
         try:
-            resp = llms["writer"].invoke(prompt)
+            resp = invoke_with_retry(
+                llms["writer"], prompt,
+                on_wait=lambda secs, n: state["events"].append(f"⏳ Writer: rate limited, retrying in {secs}s (attempt {n})")
+            )
             state["report"] = resp.content.strip()
         except Exception as e:
             state["errors"].append(f"Writer error: {e}")
@@ -271,26 +323,37 @@ def make_writer_node(llms):
 def make_critic_node(llms):
     def critic_node(state: ResearchState) -> ResearchState:
         state["events"].append("🧐 Critic: evaluating the report")
+        # critic_calls is incremented unconditionally, BEFORE any parsing,
+        # so a malformed LLM reply can never cause an infinite loop.
+        state["critic_calls"] += 1
         prompt = (
             "Score the report 0-100 for accuracy, depth and clarity. Reply in EXACTLY "
             "two lines:\nScore: <number>\nFeedback: <one short sentence>\n\n"
-            f"Report:\n{state['report'][:1500]}"
+            f"Report:\n{state['report'][:900]}"
         )
         try:
-            text = llms["critic"].invoke(prompt).content
+            text = invoke_with_retry(
+                llms["critic"], prompt,
+                on_wait=lambda secs, n: state["events"].append(f"⏳ Critic: rate limited, retrying in {secs}s (attempt {n})")
+            ).content
             score_m = re.search(r"Score:\s*(\d+)", text)
             fb_m = re.search(r"Feedback:\s*(.+)", text)
             state["critic_score"] = int(score_m.group(1)) if score_m else 70
-            state["critic_feedback"] = fb_m.group(1).strip() if fb_m else ""
+            state["critic_feedback"] = fb_m.group(1).strip() if fb_m else "Tighten clarity and factual grounding."
         except Exception as e:
             state["errors"].append(f"Critic error: {e}")
             state["critic_score"] = 70
+            state["critic_feedback"] = ""
         return state
     return critic_node
 
 
 def should_revise(state: ResearchState) -> str:
-    if state["critic_score"] >= PASS_SCORE or state["revision_count"] >= MAX_REVISIONS:
+    # Hard cap on total critic evaluations (initial pass + MAX_REVISIONS
+    # rewrites). This is the ONLY loop guard, and it advances every single
+    # time critic_node runs — regardless of parsing success — so the graph
+    # is guaranteed to terminate.
+    if state["critic_score"] >= PASS_SCORE or state["critic_calls"] >= MAX_REVISIONS + 1:
         return "publisher"
     return "writer"
 
@@ -414,6 +477,9 @@ with st.sidebar:
         st.warning("TAVILY_API_KEY not set")
     st.caption("Token-saving design: no agent tool-loops, hard max_tokens caps, "
                "truncated inputs, single revision loop.")
+    st.caption(f"If Groq's free-tier rate limit is hit mid-run, it waits and "
+               f"retries automatically (up to {RATE_LIMIT_MAX_RETRIES}x) instead "
+               f"of stopping — you'll see '⏳ retrying' in the log below.")
 
 topic = st.text_input(
     "Enter a research topic",
@@ -430,7 +496,7 @@ if run:
         orchestrator = get_orchestrator()
 
         steps = ["planner", "retriever", "reader", "analyzer", "writer", "critic", "publisher"]
-        step_pct = {s: int((i + 1) / len(steps) * 100) for i, s in enumerate(steps)}
+        step_pct = {s:int((i + 1) / len(steps) * 100) for i, s in enumerate(steps)}
 
         progress = st.progress(0, text="Starting...")
         log_box = st.empty()
