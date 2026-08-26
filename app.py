@@ -349,13 +349,23 @@ def make_critic_node(llms):
 
 
 def should_revise(state: ResearchState) -> str:
-    # Hard cap on total critic evaluations (initial pass + MAX_REVISIONS
-    # rewrites). This is the ONLY loop guard, and it advances every single
-    # time critic_node runs — regardless of parsing success — so the graph
-    # is guaranteed to terminate.
-    if state["critic_score"] >= PASS_SCORE or state["critic_calls"] >= MAX_REVISIONS + 1:
+    """
+    Decide whether the report should be revised.
+
+    Hard safety rule:
+    - The workflow can never perform more than MAX_REVISIONS revisions.
+    - critic_calls counts every Critic execution.
+    """
+
+    # First check the hard loop limit.
+    if state["critic_calls"] >= MAX_REVISIONS + 1:
         return "publisher"
-    return "writer"
+
+    # Only revise if the critic failed the quality threshold.
+    if state["critic_score"] < PASS_SCORE:
+        return "writer"
+
+    return "publisher"
 
 
 def publisher_node(state: ResearchState) -> ResearchState:
@@ -419,7 +429,10 @@ class ResearchOrchestrator:
         """
         state = init_state(topic.strip())
         final_state: ResearchState = state
-        for update in self.graph.stream(state):
+        for update in self.graph.stream(
+    state,
+    config={"recursion_limit": 15}
+):
             node_name = list(update.keys())[0]
             final_state = update[node_name]
             if on_step:
