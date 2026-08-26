@@ -805,20 +805,37 @@ Generate the final WriterOutPut.
 
 # ----- notebook cell 12 -----
 class CriticOutPut(BaseModel):
-  score:int=Field(ge=0,le=100)
-  feedback:str
-  issues:list[str]
-  sugeest:list[str]
-  citation_check:Literal["valid", "missing", "partial"]
+    score: int = Field(
+        description="Overall report quality score from 0 to 100"
+    )
 
+    feedback: str = Field(
+        description="Concise feedback, maximum 150 words"
+    )
+
+    issues: list[str] = Field(
+        description="Maximum 3 important issues"
+    )
+
+    suggestions: list[str] = Field(
+        description="Maximum 3 specific improvements"
+    )
+
+    citation_check: str = Field(
+        description="Citation quality: good, partial, or poor"
+    )
 def critic_node(state:ResearchState)->ResearchState:
   prompt=ChatPromptTemplate.from_messages([
       ("system",
          "You are a strict evaluator of research report drafts. "
-         "Score 0-100 on accuracy, completeness, and citation quality. "
-         "Be specific about what's missing or wrong."),
-        ("human",
-         "Query: {query}\n\nDraft:\n{draft}\n\nCitations used:\n{citations}")
+"Score 0-100 for accuracy, completeness, and citation quality. "
+"Be specific but concise about what's missing or wrong. "
+"Keep feedback below 100 words. "
+"Return a maximum of 3 issues. "
+"Return a maximum of 3 suggestions. "
+"Do not provide long explanations. "
+"Do not repeat the draft. "
+"Return ONLY the CriticOutPut structured output."
   ])
 
   structured_llm=llm.with_structured_output(CriticOutPut,method="function_calling")
