@@ -365,17 +365,17 @@ def make_writer_node(llms):
 
     # Normalize LangChain/Groq response content.
           if isinstance(content, list):
-            parts = []
+             parts = []
 
-          for block in content:
-            if isinstance(block, dict):
+             for block in content:
+                if isinstance(block, dict):
                 text = block.get("text", "")
                 if text:
                     parts.append(text)
-            elif isinstance(block, str):
+                elif isinstance(block, str):
                 parts.append(block)
 
-           content = "\n".join(parts)
+            content = "\n".join(parts)
 
          state["report"] = str(content).strip()
 
