@@ -352,44 +352,45 @@ def make_writer_node(llms):
             "list source titles only (one per line)."
         )
 
-        try:
-          resp = invoke_with_retry(
-          llms["writer"],
-          prompt,
-          on_wait=lambda secs, n: state["events"].append(
-            f"⏳ Writer: rate limited, retrying in {secs}s (attempt {n})"
-        )
-    )
+                try:
+            resp = invoke_with_retry(
+                llms["writer"],
+                prompt,
+                on_wait=lambda secs, n: state["events"].append(
+                    f"⏳ Writer: rate limited, retrying in {secs}s "
+                    f"(attempt {n})"
+                )
+            )
 
-          content = getattr(resp, "content", "")
+            content = getattr(resp, "content", "")
 
-    # Normalize LangChain/Groq response content.
-          if isinstance(content, list):
-             parts = []
+            if isinstance(content, list):
+                parts = []
 
-             for block in content:
-                if isinstance(block, dict):
-                  text = block.get("text", "")
-                if text:
-                    parts.append(text)
-                elif isinstance(block, str):
-                    parts.append(block)
+                for block in content:
+                    if isinstance(block, dict):
+                        text = block.get("text", "")
+                        if text:
+                            parts.append(text)
 
-              content = "\n".join(parts)
+                    elif isinstance(block, str):
+                        parts.append(block)
 
-         state["report"] = str(content).strip()
+                content = "\n".join(parts)
 
-    # Do not silently accept an empty LLM response.
-        if not state["report"]:
-          raise ValueError("Writer returned an empty response.")
+            state["report"] = str(content).strip()
 
-except Exception as e:
-    state["errors"].append(f"Writer error: {e}")
-    state["report"] = ""
+            if not state["report"]:
+                raise ValueError("Writer returned an empty response.")
 
-    return state
+        except Exception as e:
+            state["errors"].append(f"Writer error: {e}")
+            state["report"] = ""
+
+        return state
 
     return writer_node
+        
 def make_critic_node(llms):
     def critic_node(state: ResearchState) -> ResearchState:
         state["events"].append("🧐 Critic: evaluating the report")
