@@ -294,38 +294,59 @@ def make_analyzer_node(llms):
     return analyzer_node
 
 
+
 def make_writer_node(llms):
     def writer_node(state: ResearchState) -> ResearchState:
-        # revision_count is display-only; the real loop guard is critic_calls
-        # (see should_revise), so this never depends on regex-parsed text.
-        if state["critic_calls"] > 0:
-           state["revision_count"] += 1
 
-    if state["revision_count"] > MAX_REVISIONS:
-        state["errors"].append(
-            "Revision limit exceeded. Writer execution blocked."
+        # Count revisions only when Writer is called after Critic.
+        if state["critic_calls"] > 0:
+            state["revision_count"] += 1
+
+            # Safety check: never allow more revisions than configured.
+            if state["revision_count"] > MAX_REVISIONS:
+                state["errors"].append(
+                    "Revision limit exceeded. Writer execution blocked."
+                )
+                return state
+
+        state["events"].append(
+            f"✍️ Writer: drafting report (revision {state['revision_count']})"
         )
-        return state
-        state["events"].append(f"✍️ Writer: drafting report (revision {state['revision_count']})")
-        revision_note = f"\nAddress this feedback: {state['critic_feedback']}" if state.get("critic_feedback") else ""
+
+        revision_note = (
+            f"\nAddress this feedback: {state['critic_feedback']}"
+            if state.get("critic_feedback")
+            else ""
+        )
+
         prompt = (
-            f"Write a short research report (150-250 words) on: {state['topic']}\n\n"
+            f"Write a short research report (150-250 words) on: "
+            f"{state['topic']}\n\n"
             f"Key findings:\n{state['analysis']}{revision_note}\n\n"
-            "Use exactly these headers: Introduction, Key Findings, Conclusion, Sources. "
-            "Be factual and tight, no filler. Under Sources, list source titles only (one per line)."
+            "Use exactly these headers: Introduction, Key Findings, "
+            "Conclusion, Sources. "
+            "Be factual and tight, no filler. Under Sources, "
+            "list source titles only (one per line)."
         )
+
         try:
             resp = invoke_with_retry(
-                llms["writer"], prompt,
-                on_wait=lambda secs, n: state["events"].append(f"⏳ Writer: rate limited, retrying in {secs}s (attempt {n})")
+                llms["writer"],
+                prompt,
+                on_wait=lambda secs, n: state["events"].append(
+                    f"⏳ Writer: rate limited, retrying in {secs}s "
+                    f"(attempt {n})"
+                )
             )
+
             state["report"] = resp.content.strip()
+
         except Exception as e:
             state["errors"].append(f"Writer error: {e}")
+
         return state
+
     return writer_node
-
-
 def make_critic_node(llms):
     def critic_node(state: ResearchState) -> ResearchState:
         state["events"].append("🧐 Critic: evaluating the report")
