@@ -835,7 +835,7 @@ def critic_node(state:ResearchState)->ResearchState:
 "Return a maximum of 3 suggestions. "
 "Do not provide long explanations. "
 "Do not repeat the draft. "
-"Return ONLY the CriticOutPut structured output."
+"Return ONLY the CriticOutPut structured output.")
   ])
 
   structured_llm=llm.with_structured_output(CriticOutPut,method="function_calling")
