@@ -299,7 +299,7 @@ def make_writer_node(llms):
         # revision_count is display-only; the real loop guard is critic_calls
         # (see should_revise), so this never depends on regex-parsed text.
         if state["critic_calls"] > 0:
-    state["revision_count"] += 1
+           state["revision_count"] += 1
 
     if state["revision_count"] > MAX_REVISIONS:
         state["errors"].append(
