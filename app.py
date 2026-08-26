@@ -317,76 +317,80 @@ def make_analyzer_node(llms):
 def make_writer_node(llms):
     def writer_node(state: ResearchState) -> ResearchState:
 
-        # Count revisions only when Writer is called after Critic.
         if state["critic_calls"] > 0:
             state["revision_count"] += 1
-
-            # Safety check: never allow more revisions than configured.
-            if state["revision_count"] > MAX_REVISIONS:
-                state["errors"].append(
-                    "Revision limit exceeded. Writer execution blocked."
-                )
-                return state
 
         state["events"].append(
             f"✍️ Writer: drafting report (revision {state['revision_count']})"
         )
 
-        revision_note = (
-            f"\nAddress this feedback: {state['critic_feedback']}"
-            if state.get("critic_feedback")
-            else ""
-        )
+        # Build verified source list with URLs
         source_text = "\n".join(
-        f"- {s.get('title', 'Untitled')}: {s.get('url', '')}"
-        for s in state.get("sources", [])
-)
-
-        prompt = (
-            "Write a detailed research report of 400-600 words on:\n"
-    f"{state['topic']}\n\n"
-    "Use the research findings below:\n"
-    f"{state['analysis']}\n\n"
-    "Use exactly these sections:\n"
-    "## Introduction\n"
-    "## Key Findings\n"
-    "## Geopolitical and Economic Consequences\n"
-    "## Conclusion\n"
-    "## Sources\n\n"
-    "Requirements:\n"
-    "- Give a clear, detailed explanation of the topic.\n"
-    "- Use only information supported by the research findings.\n"
-    "- Do not invent facts, sources, or URLs.\n"
-    "- Include specific dates when relevant.\n"
-    "- Explain uncertainty or conflicting evidence.\n"
-    "- Under Sources, include the actual source title AND URL.\n"
-    "- Put each source on a separate line.\n"
-    "- Do not write meta-commentary about the writing process.\n"
-    "- Return ONLY the finished report."
+            f"- {s.get('title', 'Untitled Source')}: {s.get('url', '')}"
+            for s in state.get("sources", [])
+            if s.get("url")
         )
+
+        revision_note = ""
+        if state.get("critic_feedback"):
+            revision_note = (
+                f"\n\nCritic feedback from the previous draft:\n"
+                f"{state['critic_feedback']}"
+            )
+
+        prompt = f"""
+You are the Writer agent in a multi-agent research system.
+
+Write a detailed, factual research report of approximately 400-600 words.
+
+TOPIC:
+{state['topic']}
+
+RESEARCH FINDINGS:
+{state.get('analysis', '')}
+
+VERIFIED SOURCES:
+{source_text}
+
+{revision_note}
+
+STRICT REQUIREMENTS:
+
+1. Use ONLY information supported by the research findings.
+2. Do not invent facts, statistics, quotations, events, or sources.
+3. Use exactly these sections:
+
+## Introduction
+
+## Key Findings
+
+## Conclusion
+
+## Sources
+
+4. The report should clearly explain the topic rather than giving a short paragraph.
+5. Under Sources, include the actual verified source title AND URL.
+6. Do NOT create fake URLs.
+7. Do NOT mention that you are an AI.
+8. Do NOT include your reasoning process.
+9. Do NOT say that research findings are missing if research findings are provided above.
+10. Return ONLY the final report.
+
+Write the report now.
+"""
 
         try:
             resp = invoke_with_retry(
                 llms["writer"],
                 prompt,
                 on_wait=lambda secs, n: state["events"].append(
-                    f"⏳ Writer: rate limited, retrying in {secs}s "
-                    f"(attempt {n})"
+                    f"⏳ Writer: rate limited, retrying in {secs}s (attempt {n})"
                 )
             )
 
             content = getattr(resp, "content", "")
-            
-            if not content:
-               content = str(resp)
 
-            state["events"].append(
-             f"DEBUG Writer response type: {type(resp).__name__}"
-)
-            state["events"].append(
-             f"DEBUG Writer response: {str(resp)[:1000]}"
-)
-
+            # Normalize LangChain/Groq response content
             if isinstance(content, list):
                 parts = []
 
@@ -401,10 +405,15 @@ def make_writer_node(llms):
 
                 content = "\n".join(parts)
 
-            state["report"] = str(content).strip()
+            content = str(content).strip()
 
-            if not state["report"]:
-                raise ValueError("Writer returned an empty response.")
+            if not content:
+                raise ValueError(
+                    "Writer returned empty content. "
+                    "Increase writer max_tokens."
+                )
+
+            state["report"] = content
 
         except Exception as e:
             state["errors"].append(f"Writer error: {e}")
@@ -413,6 +422,10 @@ def make_writer_node(llms):
         return state
 
     return writer_node
+
+
+
+                    
         
 def make_critic_node(llms):
     def critic_node(state: ResearchState) -> ResearchState:
