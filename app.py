@@ -98,13 +98,30 @@ def input_guardrail(query: str):
 
 
 def output_guardrail(report: str, citations: List[str]) -> Dict[str, bool]:
+    # Remove the Sources section before checking report quality.
+    body = re.split(
+        r"\n##\s*(?:Sources|References)\s*\n",
+        report,
+        maxsplit=1,
+        flags=re.I
+    )[0].strip()
+
     return {
         "Has citations": len(citations) > 0,
-        "Has a sources/references section": "source" in report.lower() or "reference" in report.lower(),
-        "Meets minimum length (250 chars)": len(report) >= 250,
-        "No placeholder text": not re.search(r"\b(lorem ipsum|todo|xxx|fill in)\b", report, re.I),
-    }
 
+        "Has a sources/references section":
+            bool(re.search(r"##\s*(Sources|References)", report, re.I)),
+
+        "Meets minimum length (250 chars)":
+            len(body) >= 250,
+
+        "No placeholder text":
+            not re.search(
+                r"\b(lorem ipsum|todo|xxx|fill in)\b",
+                body,
+                re.I
+            ),
+    }
 
 # ---------------------------------------------------------------------------
 # STATE
@@ -139,9 +156,15 @@ def init_state(topic: str) -> ResearchState:
 # LLM CLIENTS — separate, tightly capped max_tokens per role
 # ---------------------------------------------------------------------------
 def _llm(max_tokens: int, temperature: float = 0.2):
-    return ChatGroq(model=MODEL_NAME, temperature=temperature, max_tokens=max_tokens)
-
-
+    return ChatGroq(
+        model=MODEL_NAME,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        model_kwargs={
+            "include_reasoning": False,
+            "reasoning_effort": "low",
+        },
+    )
 def get_llms():
     return {
         "planner": _llm(100, 0),
@@ -330,19 +353,39 @@ def make_writer_node(llms):
         )
 
         try:
-            resp = invoke_with_retry(
-                llms["writer"],
-                prompt,
-                on_wait=lambda secs, n: state["events"].append(
-                    f"⏳ Writer: rate limited, retrying in {secs}s "
-                    f"(attempt {n})"
-                )
-            )
+    resp = invoke_with_retry(
+        llms["writer"],
+        prompt,
+        on_wait=lambda secs, n: state["events"].append(
+            f"⏳ Writer: rate limited, retrying in {secs}s (attempt {n})"
+        )
+    )
 
-            state["report"] = resp.content.strip()
+    content = getattr(resp, "content", "")
 
-        except Exception as e:
-            state["errors"].append(f"Writer error: {e}")
+    # Normalize LangChain/Groq response content.
+    if isinstance(content, list):
+        parts = []
+
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get("text", "")
+                if text:
+                    parts.append(text)
+            elif isinstance(block, str):
+                parts.append(block)
+
+        content = "\n".join(parts)
+
+    state["report"] = str(content).strip()
+
+    # Do not silently accept an empty LLM response.
+    if not state["report"]:
+        raise ValueError("Writer returned an empty response.")
+
+except Exception as e:
+    state["errors"].append(f"Writer error: {e}")
+    state["report"] = ""
 
         return state
 
@@ -393,13 +436,34 @@ def should_revise(state: ResearchState) -> str:
 
 def publisher_node(state: ResearchState) -> ResearchState:
     state["events"].append("📢 Publisher: finalizing report")
-    citations = [f"- {s['title']}: {s['url']}" for s in state["sources"] if s.get("url")]
+
+    citations = [
+        f"- {s['title']}: {s['url']}"
+        for s in state["sources"]
+        if s.get("url")
+    ]
+
     state["citations"] = citations
-    final = state["report"]
+
+    # Never publish an empty report.
+    report = state["report"].strip()
+
+    if not report:
+        state["errors"].append(
+            "Publisher error: Writer produced an empty report."
+        )
+        state["final_report"] = ""
+        state["output_checks"] = output_guardrail("", citations)
+        return state
+
+    final = report
+
     if "sources" not in final.lower() and citations:
         final += "\n\n## Sources\n" + "\n".join(citations)
+
     state["final_report"] = final
     state["output_checks"] = output_guardrail(final, citations)
+
     return state
 
 
