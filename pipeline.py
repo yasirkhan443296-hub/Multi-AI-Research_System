@@ -561,36 +561,45 @@ def reader_node(state: ResearchState) -> ResearchState:
     MAX_READER_SOURCES = 3
 
     for src in state["sources"][:MAX_READER_SOURCES]:
-        try:
-            text = scrape_url(src["url"])
-        except Exception as e:
-            state["errors"].append({"node": "reader", "url": src["url"], "error": str(e)})
-            continue
-
-        text = text.strip() if text else ""
-        if len(text) < 50:
-            state["errors"].append({"node": "reader", "url": src["url"], "error": f"scraped text too short ({len(text)} chars) — skipped"})
-            continue
-
-        if len(text) > MAX_READER_CHARS:
-            text = text[:MAX_READER_CHARS]
-
-        result = chain.invoke({
+    try:
+        text = scrape_url(src["url"])
+    except Exception as e:
+        state["errors"].append({
+            "node": "reader",
             "url": src["url"],
-            "title": src["title"],
-            "text": text
+            "error": str(e)
         })
+        continue
 
-        reader_outputs.append(result.model_dump())
+    text = text.strip() if text else ""
 
-        upsert_citation(
-            citation_store,
-            title=result.title or src["title"],
-            url=result.url or src["url"],
-            source="web",
-            snippet=result.summary[:200],
-            used_in="reader"
-        )
+    if len(text) < 50:
+        state["errors"].append({
+            "node": "reader",
+            "url": src["url"],
+            "error": f"scraped text too short ({len(text)} chars) — skipped"
+        })
+        continue
+
+    if len(text) > MAX_READER_CHARS:
+        text = text[:MAX_READER_CHARS]
+
+    result = chain.invoke({
+        "url": src["url"],
+        "title": src["title"],
+        "text": text
+    })
+
+    reader_outputs.append(result.model_dump())
+
+    upsert_citation(
+        citation_store,
+        title=result.title or src["title"],
+        url=result.url or src["url"],
+        source="web",
+        snippet=result.summary[:200],
+        used_in="reader"
+    )
 
     if not reader_outputs:
         raise ValueError(
@@ -1006,16 +1015,40 @@ def critic_node(state: ResearchState) -> ResearchState:
     # what those sources say. Pull the real content (title/summary/key
     # points) for each cited URL from citation_store so the critic can do
     # real fact-checking instead of guessing from a list of links.
-    citation_store = state.get("citation_store", {})
-    citation_blocks = []
-    for url in citation_urls:
-        entry = citation_store.get(url, {})
+    
+reader_outputs = state.get("reader_outputs") or []
+
+reader_by_url = {
+    r.get("url"): r
+    for r in reader_outputs
+    if r.get("url")
+}
+
+citation_blocks = []
+
+for url in citation_urls:
+
+    reader = reader_by_url.get(url)
+
+    if reader:
         citation_blocks.append(
             f"URL: {url}\n"
-            f"Title: {entry.get('title', '(unknown)')}\n"
-            f"Content: {entry.get('snippet', '(no content available)')}"
+            f"Title: {reader.get('title', '')}\n"
+            f"Summary: {reader.get('summary', '')}\n"
+            f"Key Points: {reader.get('key_points', [])}"
         )
-    citations = "\n\n".join(citation_blocks) if citation_blocks else "No citations supplied."
+
+    else:
+        citation_blocks.append(
+            f"URL: {url}\n"
+            f"No Reader evidence available for this citation."
+        )
+
+citations = (
+    "\n\n".join(citation_blocks)
+    if citation_blocks
+    else "No citations supplied."
+)
 
     prompt = ChatPromptTemplate.from_messages([
         (
@@ -1145,9 +1178,13 @@ def publisher_node(state:ResearchState)->ResearchState:
   # instructions, so validate against citation_store (built from every
   # source the pipeline actually fetched) and fail the node — with_retry
   # will retry it — rather than silently shipping a fabricated reference.
-  citation_store = state.get("citation_store", {})
-  valid_urls = set(citation_store.keys())
+  writer_citations = state.get("report", {}).get("citation", []) or []
 
+valid_urls = {
+    url.strip()
+    for url in writer_citations
+    if isinstance(url, str) and url.strip()
+}
   invalid_citations = [u for u in result.citation if u not in valid_urls]
   if invalid_citations:
       raise ValueError(
@@ -1163,6 +1200,19 @@ def publisher_node(state:ResearchState)->ResearchState:
           f"Publisher reference URLs not found in citation_store: {invalid_refs}"
       )
 
+
+publisher_citations = {
+    url.strip()
+    for url in result.citation
+    if isinstance(url, str) and url.strip()
+}
+
+missing_citations = valid_urls - publisher_citations
+
+if missing_citations:
+    raise ValueError(
+        f"Publisher dropped Writer citations: {missing_citations}"
+    )
   final=result.model_dump()
   final["metadata"]={
       **final.get("metadata", {}),
