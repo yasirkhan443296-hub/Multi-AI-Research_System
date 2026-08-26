@@ -361,13 +361,13 @@ def make_writer_node(llms):
         )
     )
 
-    content = getattr(resp, "content", "")
+          content = getattr(resp, "content", "")
 
     # Normalize LangChain/Groq response content.
-    if isinstance(content, list):
-        parts = []
+          if isinstance(content, list):
+            parts = []
 
-        for block in content:
+          for block in content:
             if isinstance(block, dict):
                 text = block.get("text", "")
                 if text:
@@ -377,11 +377,11 @@ def make_writer_node(llms):
 
         content = "\n".join(parts)
 
-    state["report"] = str(content).strip()
+         state["report"] = str(content).strip()
 
     # Do not silently accept an empty LLM response.
-    if not state["report"]:
-        raise ValueError("Writer returned an empty response.")
+        if not state["report"]:
+          raise ValueError("Writer returned an empty response.")
 
 except Exception as e:
     state["errors"].append(f"Writer error: {e}")
