@@ -387,7 +387,7 @@ except Exception as e:
     state["errors"].append(f"Writer error: {e}")
     state["report"] = ""
 
-        return state
+    return state
 
     return writer_node
 def make_critic_node(llms):
