@@ -547,11 +547,13 @@ def analyzer_node(state:ResearchState)->ResearchState:
   structured_llm=llm.with_structured_output(AnalayerOutPut,method="function_calling")
   chain=prompt|structured_llm
 
-  result = chain.invoke({
+    result = chain.invoke({
     "query": state["query"],
     "combined": combined or "no sources available",
-    "reader_output": combined or "no reader output available"
+    "reader_output": "Reader outputs are already included in Source Material."
 })
+
+  
   state["analysis"]=result.model_dump()
   state["events"].append({"node": "analyzer", "status": "success"})
   return state
@@ -614,24 +616,28 @@ def writer_node(state: ResearchState) -> ResearchState:
     # Compact source material
     # -----------------------------
 
-    source_blocks = []
+    reader_outputs = state.get("reader_outputs") or []
 
-    for i, source in enumerate(sources[:4], start=1):
+source_blocks = []
 
-        title = source.get("title", "")
-        url = source.get("url", "")
-        snippet = str(source.get("snippet", ""))[:1200]
+for i, reader in enumerate(reader_outputs[:3], start=1):
 
-        source_blocks.append(
-            f"""
+    url = reader.get("url", "")
+    title = reader.get("title", "")
+    summary = reader.get("summary", "")
+    key_points = reader.get("key_points", [])
+
+    source_blocks.append(
+        f"""
 SOURCE {i}
 Title: {title}
 URL: {url}
-Content: {snippet}
+Summary: {summary}
+Key Points: {key_points}
 """
-        )
+    )
 
-    combined_sources = "\n".join(source_blocks)
+combined_sources = "\n".join(source_blocks)
 
     # -----------------------------
     # Writer prompt
@@ -824,38 +830,93 @@ class CriticOutPut(BaseModel):
     citation_check: str = Field(
         description="Citation quality: good, partial, or poor"
     )
-def critic_node(state:ResearchState)->ResearchState:
-  prompt=ChatPromptTemplate.from_messages([
-      ("system",
-         "You are a strict evaluator of research report drafts. "
-"Score 0-100 for accuracy, completeness, and citation quality. "
-"Be specific but concise about what's missing or wrong. "
-"Keep feedback below 100 words. "
-"Return a maximum of 3 issues. "
-"Return a maximum of 3 suggestions. "
-"Do not provide long explanations. "
-"Do not repeat the draft. "
-"Return ONLY the CriticOutPut structured output.")
-  ])
 
-  structured_llm=llm.with_structured_output(CriticOutPut,method="function_calling")
-  chain=prompt|structured_llm
+def critic_node(state: ResearchState) -> ResearchState:
 
-  result=chain.invoke({
-      "query": state["query"],
-        "draft": state["report"]["draft"],
-        "citations": state["report"].get("citation", [])
-  })
+    draft = state.get("report", {}).get("draft", "")
+    citations = state.get("report", {}).get("citation", [])
 
-  state["critic_feedback"]=result.model_dump()
-  state["events"].append({
-      "node": "critic",
+    if not draft:
+        raise ValueError("Critic received an empty draft.")
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """
+You are the Critic Agent in a multi-agent research system.
+
+Your job is to strictly evaluate the research report.
+
+Evaluate the report using these criteria:
+
+1. Accuracy — 30 points
+2. Completeness — 25 points
+3. Citation quality — 25 points
+4. Relevance and clarity — 20 points
+
+The final score must be between 0 and 100.
+
+Rules:
+
+- Evaluate ONLY the supplied draft and citations.
+- Do NOT use outside knowledge.
+- Do NOT invent missing facts.
+- Check whether important claims are supported by the supplied citations.
+- Identify specific weaknesses.
+- Give practical improvements.
+- Be strict. Do not automatically give a high score.
+- Maximum 3 issues.
+- Maximum 3 suggestions.
+- Keep feedback concise.
+
+Return ONLY the CriticOutPut structured output.
+"""
+        ),
+        (
+            "human",
+            """
+Research Query:
+{query}
+
+Research Draft:
+{draft}
+
+Citations:
+{citations}
+
+Now evaluate this research report.
+"""
+        )
+    ])
+
+    structured_llm = llm.with_structured_output(
+        CriticOutPut,
+        method="function_calling"
+    )
+
+    chain = prompt | structured_llm
+
+    result = chain.invoke({
+        "query": state["query"],
+        "draft": draft,
+        "citations": citations
+    })
+
+    if not 0 <= result.score <= 100:
+        raise ValueError(
+            f"Critic returned invalid score: {result.score}"
+        )
+
+    state["critic_feedback"] = result.model_dump()
+
+    state["events"].append({
+        "node": "critic",
         "status": "success",
-        "score": result.score
-  })
+        "score": result.score,
+        "citation_check": result.citation_check
+    })
 
-  return state
-
+    return state
 # ----- notebook cell 13 -----
 class PublisherOutPut(BaseModel):
   report:str
@@ -945,10 +1006,25 @@ graph.add_edge("analyzer","writer")
 graph.add_edge("writer","critic")
 
 def route_after_critic(state: ResearchState) -> str:
-    score = state["critic_feedback"]["score"]
-    if score >= 75 or state["revision_count"] >= state["max_revisions"]:
+
+    critic_feedback = state.get("critic_feedback") or {}
+
+    score = critic_feedback.get("score", 0)
+
+    revision_count = state.get("revision_count", 0)
+    max_revisions = state.get("max_revisions", 2)
+
+    # Good enough → publish
+    if score >= 75:
         return "publisher"
-    state["revision_count"] += 1
+
+    # Maximum revisions already reached → publish
+    if revision_count >= max_revisions:
+        return "publisher"
+
+    # Otherwise perform another revision
+    state["revision_count"] = revision_count + 1
+
     return "writer"
 
 graph.add_conditional_edges("critic",route_after_critic,
