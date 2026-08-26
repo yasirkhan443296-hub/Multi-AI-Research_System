@@ -373,7 +373,7 @@ def make_writer_node(llms):
                 if text:
                     parts.append(text)
                 elif isinstance(block, str):
-                parts.append(block)
+                    parts.append(block)
 
             content = "\n".join(parts)
 
