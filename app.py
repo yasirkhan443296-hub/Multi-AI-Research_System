@@ -159,11 +159,7 @@ def _llm(max_tokens: int, temperature: float = 0.2):
     return ChatGroq(
         model=MODEL_NAME,
         temperature=temperature,
-        max_tokens=max_tokens,
-        model_kwargs={
-            "include_reasoning": False,
-            "reasoning_effort": "low",
-        },
+        max_tokens=max_tokens
     )
 def get_llms():
     return {
