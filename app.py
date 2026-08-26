@@ -337,15 +337,32 @@ def make_writer_node(llms):
             if state.get("critic_feedback")
             else ""
         )
+      source_text = "\n".join(
+    f"- {s.get('title', 'Untitled')}: {s.get('url', '')}"
+    for s in state.get("sources", [])
+)
 
         prompt = (
-            f"Write a short research report (150-250 words) on: "
-            f"{state['topic']}\n\n"
-            f"Key findings:\n{state['analysis']}{revision_note}\n\n"
-            "Use exactly these headers: Introduction, Key Findings, "
-            "Conclusion, Sources. "
-            "Be factual and tight, no filler. Under Sources, "
-            "list source titles only (one per line)."
+            "Write a detailed research report of 400-600 words on:\n"
+    f"{state['topic']}\n\n"
+    "Use the research findings below:\n"
+    f"{state['analysis']}\n\n"
+    "Use exactly these sections:\n"
+    "## Introduction\n"
+    "## Key Findings\n"
+    "## Geopolitical and Economic Consequences\n"
+    "## Conclusion\n"
+    "## Sources\n\n"
+    "Requirements:\n"
+    "- Give a clear, detailed explanation of the topic.\n"
+    "- Use only information supported by the research findings.\n"
+    "- Do not invent facts, sources, or URLs.\n"
+    "- Include specific dates when relevant.\n"
+    "- Explain uncertainty or conflicting evidence.\n"
+    "- Under Sources, include the actual source title AND URL.\n"
+    "- Put each source on a separate line.\n"
+    "- Do not write meta-commentary about the writing process.\n"
+    "- Return ONLY the finished report."
         )
 
         try:
