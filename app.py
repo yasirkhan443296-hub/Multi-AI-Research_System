@@ -359,6 +359,16 @@ def make_writer_node(llms):
             )
 
             content = getattr(resp, "content", "")
+            
+            if not content:
+               content = str(resp)
+
+            state["events"].append(
+             f"DEBUG Writer response type: {type(resp).__name__}"
+)
+            state["events"].append(
+             f"DEBUG Writer response: {str(resp)[:1000]}"
+)
 
             if isinstance(content, list):
                 parts = []
