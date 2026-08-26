@@ -369,7 +369,7 @@ def make_writer_node(llms):
 
              for block in content:
                 if isinstance(block, dict):
-                text = block.get("text", "")
+                  text = block.get("text", "")
                 if text:
                     parts.append(text)
                 elif isinstance(block, str):
