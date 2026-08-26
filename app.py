@@ -164,9 +164,9 @@ def _llm(max_tokens: int, temperature: float = 0.2):
 def get_llms():
     return {
         "planner": _llm(100, 0),
-        "analyzer": _llm(220, 0.2),
-        "writer": _llm(450, 0.4),
-        "critic": _llm(90, 0),
+        "analyzer": _llm(300, 0.2),
+        "writer": _llm(700, 0.4),
+        "critic": _llm(120, 0),
     }
 
 
