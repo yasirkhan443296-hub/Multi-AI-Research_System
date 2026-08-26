@@ -352,7 +352,7 @@ def make_writer_node(llms):
             "list source titles only (one per line)."
         )
 
-         try:
+        try:
             resp = invoke_with_retry(
                 llms["writer"],
                 prompt,
