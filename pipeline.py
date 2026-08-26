@@ -1,4 +1,4 @@
-pipeline.py -- generated from the bug-fixed research_system.ipynb
+#pipeline.py -- generated from the bug-fixed research_system.ipynb
 # Same logic as the notebook. Only mechanical changes for import-safety:
 #  - no !pip install lines
 #  - cell 15 (with_retry/log_event) moved before cell 14 (graph build),
