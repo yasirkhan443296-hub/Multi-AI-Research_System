@@ -609,33 +609,59 @@ if run:
             st.error(f"Pipeline failed: {e}")
 
         if final_state:
-            progress.progress(100, text="Done")
-            st.success("Research complete!")
+    progress.progress(100, text="Done")
+    st.success("Research complete!")
 
-            st.subheader("📄 Final Report")
-            st.markdown(f'<div class="report-box">', unsafe_allow_html=True)
-            st.markdown(final_state["final_report"])
-            st.markdown("</div>", unsafe_allow_html=True)
+    st.subheader("📄 Final Report")
 
-            st.download_button(
-                "⬇️ Download report (.md)",
-                final_state["final_report"],
-                file_name="research_report.md",
-                mime="text/markdown",
-            )
+    report = (
+        final_state.get("final_report")
+        or final_state.get("report")
+        or ""
+    )
 
-            with st.expander("📊 Output guardrails & evaluation"):
-                for k, v in final_state.get("output_checks", {}).items():
-                    st.write(("✅ " if v else "❌ ") + k)
-                st.write(f"**Sources found:** {len(final_state['sources'])}")
-                st.write(f"**Revisions used:** {final_state['revision_count']}/{MAX_REVISIONS}")
-                st.write(f"**Final critic score:** {final_state['critic_score']}/100")
-                st.write(f"**Errors:** {len(final_state['errors'])}")
+    if report:
+        st.markdown(
+            f'<div class="report-box">{report}</div>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.warning("No final report was generated.")
 
-            if final_state.get("errors"):
-                with st.expander("⚠️ Errors"):
-                    for e in final_state["errors"]:
-                        st.write("- " + e)
+    st.download_button(
+        "⬇️ Download report (.md)",
+        report,
+        file_name="research_report.md",
+        mime="text/markdown",
+    )
+
+    with st.expander("📊 Output guardrails & evaluation"):
+        for k, v in final_state.get("output_checks", {}).items():
+            st.write(("✅ " if v else "❌ ") + k)
+
+        st.write(
+            f"**Sources found:** {len(final_state.get('sources', []))}"
+        )
+
+        st.write(
+            f"**Revisions used:** "
+            f"{final_state.get('revision_count', 0)}"
+        )
+
+        st.write(
+            f"**Final critic score:** "
+            f"{final_state.get('critic_score', 0)}/100"
+        )
+
+        st.write(
+            f"**Errors:** "
+            f"{len(final_state.get('errors', []))}"
+        )
+
+    if final_state.get("errors"):
+        with st.expander("⚠️ Errors"):
+            for e in final_state["errors"]:
+                st.write("- " + e)
 
             with st.expander("🧭 Plan & sources used"):
                 st.write("**Plan:**")
