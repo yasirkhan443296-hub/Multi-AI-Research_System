@@ -67,7 +67,7 @@ load_dotenv()
 # CONFIG — set as low-cost as possible by default. No revision loop, small
 # max_tokens on every call, minimal content pulled into prompts.
 # ---------------------------------------------------------------------------
-MODEL_NAME = "llama-3.1-8b-instant"   # smallest/cheapest general Groq model
+MODEL_NAME = "openai/gpt-oss-20b"   # smallest/cheapest general Groq model
 MAX_SUBTOPICS = 2                     # fewer subtopics -> fewer search calls
 RESULTS_PER_SUBTOPIC = 2
 TOP_SOURCES_TO_READ = 2               # fewer pages scraped -> less text to feed the LLM
