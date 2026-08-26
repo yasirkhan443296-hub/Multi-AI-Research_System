@@ -299,7 +299,13 @@ def make_writer_node(llms):
         # revision_count is display-only; the real loop guard is critic_calls
         # (see should_revise), so this never depends on regex-parsed text.
         if state["critic_calls"] > 0:
-            state["revision_count"] += 1
+    state["revision_count"] += 1
+
+    if state["revision_count"] > MAX_REVISIONS:
+        state["errors"].append(
+            "Revision limit exceeded. Writer execution blocked."
+        )
+        return state
         state["events"].append(f"✍️ Writer: drafting report (revision {state['revision_count']})")
         revision_note = f"\nAddress this feedback: {state['critic_feedback']}" if state.get("critic_feedback") else ""
         prompt = (
@@ -347,25 +353,21 @@ def make_critic_node(llms):
         return state
     return critic_node
 
-
 def should_revise(state: ResearchState) -> str:
-    """
-    Decide whether the report should be revised.
+    # MAX_REVISIONS = 0 means NEVER go back to Writer.
+    if MAX_REVISIONS == 0:
+        return "publisher"
 
-    Hard safety rule:
-    - The workflow can never perform more than MAX_REVISIONS revisions.
-    - critic_calls counts every Critic execution.
-    """
-
-    # First check the hard loop limit.
+    # Hard safety limit.
     if state["critic_calls"] >= MAX_REVISIONS + 1:
         return "publisher"
 
-    # Only revise if the critic failed the quality threshold.
+    # Revise only when quality is below the threshold.
     if state["critic_score"] < PASS_SCORE:
         return "writer"
 
     return "publisher"
+
 
 
 def publisher_node(state: ResearchState) -> ResearchState:
@@ -383,7 +385,7 @@ def publisher_node(state: ResearchState) -> ResearchState:
 # ---------------------------------------------------------------------------
 # GRAPH
 # ---------------------------------------------------------------------------
-@st.cache_resource(show_spinner=False)
+
 def build_graph():
     llms = get_llms()
     graph = StateGraph(ResearchState)
@@ -440,7 +442,7 @@ class ResearchOrchestrator:
         return final_state
 
 
-@st.cache_resource(show_spinner=False)
+
 def get_orchestrator() -> "ResearchOrchestrator":
     return ResearchOrchestrator()
 
