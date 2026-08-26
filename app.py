@@ -375,7 +375,7 @@ def make_writer_node(llms):
                 elif isinstance(block, str):
                     parts.append(block)
 
-            content = "\n".join(parts)
+              content = "\n".join(parts)
 
          state["report"] = str(content).strip()
 
