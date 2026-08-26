@@ -337,9 +337,9 @@ def make_writer_node(llms):
             if state.get("critic_feedback")
             else ""
         )
-      source_text = "\n".join(
-    f"- {s.get('title', 'Untitled')}: {s.get('url', '')}"
-    for s in state.get("sources", [])
+        source_text = "\n".join(
+        f"- {s.get('title', 'Untitled')}: {s.get('url', '')}"
+        for s in state.get("sources", [])
 )
 
         prompt = (
