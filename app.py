@@ -353,10 +353,10 @@ def make_writer_node(llms):
         )
 
         try:
-    resp = invoke_with_retry(
-        llms["writer"],
-        prompt,
-        on_wait=lambda secs, n: state["events"].append(
+          resp = invoke_with_retry(
+          llms["writer"],
+          prompt,
+          on_wait=lambda secs, n: state["events"].append(
             f"⏳ Writer: rate limited, retrying in {secs}s (attempt {n})"
         )
     )
